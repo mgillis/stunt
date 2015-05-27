@@ -93,6 +93,7 @@ free_intern_entry_hunks(void)
         next = h->next;
         myfree(h->contents, M_INTERN_ENTRY);
 #ifdef VALGRIND
+        /* putting a comment here to make git-imerge happy */
         VALGRIND_DESTROY_MEMPOOL(h->contents);
 #endif
         myfree(h, M_INTERN_HUNK);
