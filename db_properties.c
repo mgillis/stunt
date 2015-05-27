@@ -449,6 +449,7 @@ db_find_property(Objid oid, const char *name, Var * value)
 	    }
 	}
     }
+
     h.ptr = 0;
     return h;
 }
@@ -676,10 +677,13 @@ dbpriv_fix_properties_after_chparent(Objid oid, Objid old_parent)
     fix_props(oid, 0, old_props, new_props, common_props);
 }
 
-char rcsid_db_properties[] = "$Id: db_properties.c,v 1.4 2010/03/26 23:46:47 wrog Exp $";
+char rcsid_db_properties[] = "$Id: db_properties.c,v 1.5 2010/04/23 04:46:18 wrog Exp $";
 
 /* 
  * $Log: db_properties.c,v $
+ * Revision 1.5  2010/04/23 04:46:18  wrog
+ * whitespace
+ *
  * Revision 1.4  2010/03/26 23:46:47  wrog
  * Moved builtin properties into a macro\nFixed compiler warning about unassigned field
  *
