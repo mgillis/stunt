@@ -590,11 +590,16 @@ bf_is_member(Var arglist, Byte next, void *vdata, Objid progr)
 }
 
 #define TRY_STREAM     { enable_stream_exceptions(); TRY
-#define ENDTRY_STREAM						\
-    if (!server_flag_option_cached(SVO_MAX_CONCAT_CATCHABLE))	\
-	    task_timed_out = 1;					\
-    ENDTRY  disable_stream_exceptions(); }
+#define ENDTRY_STREAM  ENDTRY  disable_stream_exceptions(); }
 
+static package
+make_space_pack()
+{
+    if (server_flag_option_cached(SVO_MAX_CONCAT_CATCHABLE))
+	return make_error_pack(E_QUOTA);
+    else
+	return make_abort_pack(ABORT_SECONDS);
+}
 
 static package
 bf_strsub(Var arglist, Byte next, void *vdata, Objid progr)
@@ -619,7 +624,7 @@ bf_strsub(Var arglist, Byte next, void *vdata, Objid progr)
 	p = make_var_pack(r);
     }
     EXCEPT (stream_too_big) {
-	p = make_error_pack(E_QUOTA);
+	p = make_space_pack();
     }	    
     ENDTRY_STREAM;
     free_stream(s);
@@ -727,7 +732,7 @@ bf_tostr(Var arglist, Byte next, void *vdata, Objid progr)
 	p = make_var_pack(r);
     }
     EXCEPT (stream_too_big) {
-	p = make_error_pack(E_QUOTA);
+	p = make_space_pack();
     }
     ENDTRY_STREAM;
     free_stream(s);
@@ -748,7 +753,7 @@ bf_toliteral(Var arglist, Byte next, void *vdata, Objid progr)
 	p = make_var_pack(r);
     }
     EXCEPT (stream_too_big) {
-	p = make_error_pack(E_QUOTA);
+	p = make_space_pack();
     }
     ENDTRY_STREAM;
     free_stream(s);
@@ -951,7 +956,7 @@ bf_substitute(Var arglist, Byte next, void *vdata, Objid progr)
     int template_length, subject_length;
     const char *template, *subject;
     Var subs, ans;
-    enum error e = E_NONE;
+    package p;
     Stream *s;
     char c = '\0';
 
@@ -985,7 +990,7 @@ bf_substitute(Var arglist, Byte next, void *vdata, Objid progr)
 			start = subs.v.list[1].v.num - 1;
 			end = subs.v.list[2].v.num - 1;
 		    } else {
-			e = E_INVARG;
+			p = make_error_pack(E_INVARG);
 			goto oops;
 		    }
 		    while (start <= end)
@@ -995,18 +1000,16 @@ bf_substitute(Var arglist, Byte next, void *vdata, Objid progr)
 	}
 	ans.type = TYPE_STR;
 	ans.v.str = str_dup(reset_stream(s));
+	p = make_var_pack(ans);
     oops: ;
     }
     EXCEPT (stream_too_big) {
-	e = E_QUOTA;
+	p = make_space_pack();
     }
     ENDTRY_STREAM;
     free_var(arglist);
     free_stream(s);
-    if (e == E_NONE)
-	return make_var_pack(ans);
-    else
-	return make_error_pack(e);
+    return p;
 }
 
 static package
@@ -1074,7 +1077,7 @@ bf_value_hash(Var arglist, Byte next, void *vdata, Objid progr)
 	p = make_var_pack(r);
     }
     EXCEPT (stream_too_big) {
-	p = make_error_pack(E_QUOTA);
+	p = make_space_pack();
     }
     ENDTRY_STREAM;
     free_stream(s);
@@ -1098,9 +1101,7 @@ bf_decode_binary(Var arglist, Byte next, void *vdata, Objid progr)
 
     if (fully) {
 	if (length > server_int_option_cached(SVO_MAX_LIST_CONCAT)) {
-	    if (!server_flag_option_cached(SVO_MAX_CONCAT_CATCHABLE))
-		task_timed_out = 1;
-	    return make_error_pack(E_QUOTA);
+	    return make_space_pack();
 	}
 	r = new_list(length);
 	for (i = 1; i <= length; i++) {
@@ -1126,9 +1127,7 @@ bf_decode_binary(Var arglist, Byte next, void *vdata, Objid progr)
 
 	if (count > server_int_option_cached(SVO_MAX_LIST_CONCAT)) {
 	    free_stream(s);
-	    if (!server_flag_option_cached(SVO_MAX_CONCAT_CATCHABLE))
-		task_timed_out = 1;
-	    return make_error_pack(E_QUOTA);
+	    return make_space_pack();
 	}
 	r = new_list(count);
 	for (count = 1, in_string = 0, i = 0; i < length; i++) {
@@ -1190,7 +1189,7 @@ static package
 bf_encode_binary(Var arglist, Byte next, void *vdata, Objid progr)
 {
     Var r;
-    enum error e = E_NONE;
+    package p;
     Stream *s = new_stream(100);
     Stream *s2 = new_stream(100);
     TRY_STREAM {
@@ -1200,21 +1199,19 @@ bf_encode_binary(Var arglist, Byte next, void *vdata, Objid progr)
 	    stream_add_raw_bytes_to_binary(s2, bytes, length);
 	    r.type = TYPE_STR;
 	    r.v.str = str_dup(reset_stream(s2));
+	    p = make_var_pack(r);
 	}
 	else
-	    e = E_INVARG;
+	    p = make_error_pack(E_INVARG);
     }
     EXCEPT (stream_too_big) {
-	e = E_QUOTA;
+	p = make_space_pack();
     }
     ENDTRY_STREAM;
     free_stream(s2);
     free_stream(s);
     free_var(arglist);
-    if (e == E_NONE)
-	return make_var_pack(r);
-    else
-	return make_error_pack(e);
+    return p;
 }
 
 struct bf_map_data {
@@ -1355,10 +1352,14 @@ register_list(void)
 }
 
 
-char rcsid_list[] = "$Id: list.c,v 1.9 2010/03/30 23:13:39 wrog Exp $";
+char rcsid_list[] = "$Id: list.c,v 1.10 2010/03/31 18:08:07 wrog Exp $";
 
 /* 
  * $Log: list.c,v $
+ * Revision 1.10  2010/03/31 18:08:07  wrog
+ * builtin functions can now explicitly abort task with out-of-seconds/ticks
+ * using make_abort_pack()/BI_KILL rather than by setting task_timed_out
+ *
  * Revision 1.9  2010/03/30 23:13:39  wrog
  * rewrote bf_strsub(), bf_tostr(), bf_toliteral(),
  * -  bf_substitute(), bf_value_hash(), bf_encode_binary()
