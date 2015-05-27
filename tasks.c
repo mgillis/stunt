@@ -1739,13 +1739,14 @@ killing_closure(vm the_vm, const char *status, void *data)
 {
     struct kcl_data *kdata = data;
 
-    if (the_vm->task_id == kdata->id)
+    if (the_vm->task_id == kdata->id) {
 	if (is_wizard(kdata->owner)
 	    || progr_of_cur_verb(the_vm) == kdata->owner) {
 	    free_vm(the_vm, 1);
 	    return TEA_KILL;
 	} else
 	    return TEA_STOP;
+    }
 
     return TEA_CONTINUE;
 }
@@ -1757,7 +1758,6 @@ kill_task(int id, Objid owner)
     tqueue *tq;
 
     if (id == current_task_id) {
-	abort_running_task();
 	return E_NONE;
     }
     for (tt = &waiting_tasks; *tt; tt = &((*tt)->next)) {
@@ -1843,11 +1843,14 @@ kill_task(int id, Objid owner)
 static package
 bf_kill_task(Var arglist, Byte next, void *vdata, Objid progr)
 {
-    enum error e = kill_task(arglist.v.list[1].v.num, progr);
+    int id = arglist.v.list[1].v.num;
+    enum error e = kill_task(id, progr);
 
     free_var(arglist);
     if (e != E_NONE)
 	return make_error_pack(e);
+    else if (id == current_task_id)
+	return make_kill_pack();
 
     return no_var_pack();
 }
@@ -2127,9 +2130,7 @@ register_tasks(void)
 #endif
 }
 
-char rcsid_tasks[] = "$Id: tasks.c,v 1.10 2010/05/17 07:25:35 blacklite Exp $";
-
-/* 
+/*
  * $Log: tasks.c,v $
  * Revision 1.10  2010/05/17 07:25:35  blacklite
  * last fixes for 1.10.4
@@ -2148,8 +2149,16 @@ char rcsid_tasks[] = "$Id: tasks.c,v 1.10 2010/05/17 07:25:35 blacklite Exp $";
  * Revision 1.6  2009/03/27 20:26:49  blacklite
  * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
  *
- * Revision 1.5  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ */
+
+char rcsid_tasks[] = "$Id: tasks.c,v 1.6 2001/03/12 03:25:17 bjj Exp $";
+
+/* 
+ * $Log: tasks.c,v $
+ * Revision 1.6  2001/03/12 03:25:17  bjj
+ * Added new package type BI_KILL which kills the task calling the builtin.
+ * Removed the static int task_killed in execute.c which wa tested on every
+ * loop through the interpreter to see if the task had been killed.
  *
  * Revision 1.5  1998/12/14 13:19:07  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims

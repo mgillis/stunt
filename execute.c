@@ -66,7 +66,6 @@ static int ticks_remaining;
 static int task_was_suspended;
 int task_timed_out;
 static int interpreter_is_running = 0;
-static int task_killed;
 static Timer_ID task_alarm_id;
 static task_kind current_task_kind;
 
@@ -419,6 +418,8 @@ unwind_stack(Finally_Reason why, Var value, enum outcome *outcome)
 		    a->bi_func_pc = p.u.call.pc;
 		    a->bi_func_data = p.u.call.data;
 		    return 0;
+		case BI_KILL:
+		    return unwind_stack(FIN_ABORT, zero, outcome);
 		}
 	    } else {
 		/* Built-in functions receive zero as a `returned value' on
@@ -443,6 +444,7 @@ unwind_stack(Finally_Reason why, Var value, enum outcome *outcome)
 			free_var(p.u.raise.value);
 			break;
 		    case BI_SUSPEND:
+		    case BI_KILL:
 			break;
 		    case BI_CALL:
 			free_activation(activ_stack[top_activ_stack--], 0);
@@ -874,6 +876,8 @@ run(char raise, enum error resumption_error, Var * result)
 	     + ((unsigned) bv[-2] << 8)      	\
 	     + bv[-1]))))
 
+#define SKIP_BYTES(bv, nb)	(void)(bv += nb)
+
 #define LOAD_STATE_VARIABLES() 					\
 do {  								\
     bc = ( (top_activ_stack != 0 || root_activ_vector == MAIN_VECTOR) \
@@ -939,11 +943,6 @@ do {    						    	\
 		return OUTCOME_ABORTED;
 	    }
 	}
-	if (task_killed) {
-	    STORE_STATE_VARIABLES();
-	    unwind_stack(FIN_ABORT, zero, 0);
-	    return OUTCOME_ABORTED;
-	}
 	switch (op) {
 
 	case OP_IF_QUES:
@@ -958,7 +957,7 @@ do {    						    	\
 		if (!is_true(cond))	/* jump if false */
 		    JUMP(READ_BYTES(bv, bc.numbytes_label));
 		else {
-		    bv += bc.numbytes_label;
+		    SKIP_BYTES(bv, bc.numbytes_label);
 		}
 		free_var(cond);
 	    }
@@ -1919,6 +1918,11 @@ do {    						    	\
 				PUSH_ERROR(e);
 			}
 			break;
+		    case BI_KILL:
+			STORE_STATE_VARIABLES();
+			unwind_stack(FIN_ABORT, zero, 0);
+			return OUTCOME_ABORTED;
+			/* NOTREACHED */
 		    }
 		}
 	    }
@@ -2077,8 +2081,8 @@ do {    						    	\
 			    free_var(POP());	/* replace list with error code */
 			    PUSH_ERROR(e);
 			    for (i = 1; i <= nargs; i++) {
-				READ_BYTES(bv, bc.numbytes_var_name);
-				READ_BYTES(bv, bc.numbytes_label);
+			        SKIP_BYTES(bv, bc.numbytes_var_name);
+			        SKIP_BYTES(bv, bc.numbytes_label);
 			    }
 			} else {
 			    nopt_avail = len - nreq;
@@ -2450,7 +2454,7 @@ setup_task_execution_limits(int seconds, int ticks)
 {
     task_alarm_id = set_virtual_timer(seconds < 1 ? 1 : seconds,
 				      task_timeout, 0);
-    task_timed_out = task_killed = 0;
+    task_timed_out = 0;
     ticks_remaining = (ticks < 100 ? 100 : ticks);
     return task_alarm_id;
 }
@@ -2763,12 +2767,6 @@ setup_activ_for_eval(Program * prog)
     }
 
     return 1;
-}
-
-void
-abort_running_task(void)
-{
-    task_killed = 1;
 }
 
 /**** built in functions ****/
@@ -3384,9 +3382,7 @@ read_activ(activation * a, int which_vector)
 }
 
 
-char rcsid_execute[] = "$Id: execute.c,v 1.19 2014/02/26 09:02:00 broseidon Exp $";
-
-/* 
+/*
  * $Log: execute.c,v $
  * Revision 1.19  2010/05/17 07:25:35  blacklite
  * last fixes for 1.10.4
@@ -3440,6 +3436,16 @@ char rcsid_execute[] = "$Id: execute.c,v 1.19 2014/02/26 09:02:00 broseidon Exp 
  *
  * Revision 1.3  2007/09/12 07:33:29  spunky
  * This is a working version of the current HellMOO server
+ */
+
+char rcsid_execute[] = "$Id: execute.c,v 1.11 2001/03/12 03:25:16 bjj Exp $";
+
+/* 
+ * $Log: execute.c,v $
+ * Revision 1.11  2001/03/12 03:25:16  bjj
+ * Added new package type BI_KILL which kills the task calling the builtin.
+ * Removed the static int task_killed in execute.c which wa tested on every
+ * loop through the interpreter to see if the task had been killed.
  *
  * Revision 1.10  1998/12/14 13:17:50  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
