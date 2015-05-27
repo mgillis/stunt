@@ -1344,6 +1344,7 @@ main(int argc, char **argv)
     oklog("          (Using File Utilities Package version %s)\n", FUP_version);
     oklog("          (Task timeouts measured in %s seconds.)\n",
 	  virtual_timer_available()? "server CPU" : "wall-clock");
+    oklog("          (Process id %d)\n", getpid());
 
     register_bi_functions();
 
