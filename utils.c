@@ -14,6 +14,27 @@
     Palo Alto, CA 94304
     Pavel@Xerox.Com
  *****************************************************************************/
+/*
+ * $Log: utils.c,v $
+ * Revision 1.10  2009/07/22 19:33:52  blacklite
+ * Fixed truth value of null hash [], and made [] == [].
+ *
+ * Revision 1.9  2009/07/22 19:27:10  blacklite
+ * Fixed bug where a dup'd hash pointed to old hashes' keys/values.
+ *
+ * Revision 1.8  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.2  2005/07/07 23:43:48  spunky
+ * Fixed a bug that was causing non-binary spec'd characters appearing after a
+ * tilde to always appear in upper-case.
+ *
+ * Revision 1.1.1.1  2005/04/11 03:50:09  spunky
+ * original sources + existing hacks
+ */
+
 
 #include "my-ctype.h"
 #include "my-stdio.h"
@@ -129,13 +150,10 @@ verbcasecmp(const char *verb, const char *word)
 unsigned
 str_hash(const char *s)
 {
-    unsigned ans = 0;
-    int i, len = strlen(s), offset = 0;
+    register unsigned ans = 0;
 
-    for (i = 0; i < len; i++) {
-	ans = ans ^ (cmap[(unsigned char) s[i]] << offset++);
-	if (offset == 25)
-	    offset = 0;
+    while (*s) {
+	ans = (ans << 3) + (ans >> 28) + cmap[(unsigned char) *s++];
     }
     return ans;
 }
@@ -515,30 +533,12 @@ binary_to_raw_bytes(const char *binary, int *buflen)
     return reset_stream(s);
 }
 
-char rcsid_utils[] = "$Id: utils.c,v 1.10 2009/07/22 19:33:52 blacklite Exp $";
+char rcsid_utils[] = "$Id: utils.c,v 1.6 2002/08/18 08:51:50 bjj Exp $";
 
 /* 
  * $Log: utils.c,v $
- * Revision 1.10  2009/07/22 19:33:52  blacklite
- * Fixed truth value of null hash [], and made [] == [].
- *
- * Revision 1.9  2009/07/22 19:27:10  blacklite
- * Fixed bug where a dup'd hash pointed to old hashes' keys/values.
- *
- * Revision 1.8  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.7  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
- *
- * Revision 1.2  2005/07/07 23:43:48  spunky
- * Fixed a bug that was causing non-binary spec'd characters appearing after a
- * tilde to always appear in upper-case.
- *
- * Revision 1.1.1.1  2005/04/11 03:50:09  spunky
- * original sources + existing hacks
+ * Revision 1.6  2002/08/18 08:51:50  bjj
+ * Faster and better (?) hash function.  Yes it really was slow.
  *
  * Revision 1.5  1999/08/09 02:36:33  nop
  * Shortcut various equality tests if we have pointer equality.
