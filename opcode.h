@@ -15,6 +15,18 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/*
+ * Hellmoo changes:
+ * Revision 1.5  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ */
+
+
 #ifndef Opcode_h
 #define Opcode_h 1
 
@@ -78,7 +90,7 @@ enum Opcode {
     /* final variable references, no tick: */
     OP_PUSH_CLEAR,
     OP_G_PUSH_CLEAR = OP_PUSH_CLEAR + NUM_READY_VARS,
-#endif /* BYTECODE_REDUCE_REF */
+#endif				/* BYTECODE_REDUCE_REF */
 
     /* expr-related opcodes with no tick: */
     OP_IMM, OP_MAKE_EMPTY_LIST, OP_LIST_ADD_TAIL, OP_LIST_APPEND,
@@ -103,7 +115,7 @@ enum Opcode {
 #define IS_PUSH_CLEAR_n(o)             ((o) >= (unsigned) OP_PUSH_CLEAR \
 				  && (o) < (unsigned) OP_G_PUSH_CLEAR)
 #define PUSH_CLEAR_n_INDEX(o)          ((o) - OP_PUSH_CLEAR)
-#endif /* BYTECODE_REDUCE_REF */
+#endif				/* BYTECODE_REDUCE_REF */
 #define IS_PUT_n(o)              ((o) >= (unsigned) OP_PUT \
 				  && (o) < (unsigned) OP_G_PUT)
 #define PUSH_n_INDEX(o)          ((o) - OP_PUSH)
@@ -130,16 +142,8 @@ typedef enum Extended_Opcode Extended_Opcode;
 
 /* 
  * $Log: opcode.h,v $
- * Revision 1.5  2009/03/27 20:26:49  blacklite
- * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
- *
- * Revision 1.4  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.4  2002/09/15 23:21:01  xplat
+ * GNU indent normalization.
  *
  * Revision 1.3  1998/12/14 13:18:40  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims

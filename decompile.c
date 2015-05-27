@@ -15,6 +15,20 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/*
+ * Hellmoo changes:
+ * Revision 1.6  2009/03/28 02:50:16  blacklite
+ * fixed improper comparison in decompile for EOP_YIELD which resulted in erroneous decompilation -- they would be treated as EOP_YIELD0 and emit STMT_YIELD with no attached expr.
+ *
+ * Revision 1.5  2009/03/27 21:34:36  blacklite
+ * add decompile support for new yield changes (also should have been in previous commits, I really suck at cvs
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ */
+
 #include "ast.h"
 #include "decompile.h"
 #include "exceptions.h"
@@ -161,7 +175,7 @@ decompile(Bytecodes bc, Byte * start, Byte * end, Stmt ** stmt_sink,
 	    e->e.id = PUSH_CLEAR_n_INDEX(op);
 	    push_expr(HOT_OP(e));
 	    continue;
-#endif /* BYTECODE_REDUCE_REF */
+#endif				/* BYTECODE_REDUCE_REF */
 	} else if (IS_PUT_n(op)) {
 	    e = alloc_expr(EXPR_ID);
 	    e->e.id = PUT_n_INDEX(op);
@@ -1007,23 +1021,12 @@ find_line_number(Program * prog, int vector, int pc)
     return lineno;
 }
 
-char rcsid_decompile[] = "$Id: decompile.c,v 1.6 2009/03/28 02:50:16 blacklite Exp $";
+char rcsid_decompile[] = "$Id: decompile.c,v 1.6 2002/09/15 23:21:01 xplat Exp $";
 
 /* 
  * $Log: decompile.c,v $
- * Revision 1.6  2009/03/28 02:50:16  blacklite
- * fixed improper comparison in decompile for EOP_YIELD which resulted in erroneous decompilation -- they would be treated as EOP_YIELD0 and emit STMT_YIELD with no attached expr.
- *
- * Revision 1.5  2009/03/27 21:34:36  blacklite
- * add decompile support for new yield changes (also should have been in previous commits, I really suck at cvs
- *
- * Revision 1.4  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.6  2002/09/15 23:21:01  xplat
+ * GNU indent normalization.
  *
  * Revision 1.5  1999/08/11 08:23:40  bjj
  * Lineno computation could be wrong for forked vectors.

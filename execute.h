@@ -99,9 +99,9 @@ extern enum error call_verb(Objid obj, const char *vname, Var args,
 /* if your vname is already a moo str (via str_dup) then you can
    use this interface instead */
 extern enum error direct_call_verb(Objid obj, const char *vname_in, Var THIS, Var args,
-			    int do_pass);
+			     int do_pass);
 extern enum error direct_call_verb_without_this(Objid, const char *vname_in, Var args,
-                int do_pass);
+			     int do_pass);
 
 extern int setup_activ_for_eval(Program * prog);
 
@@ -151,8 +151,11 @@ extern int read_activ(activation * a, int which_vector);
 
 #endif
 
-
 /*
+ * $Log: execute.h,v $
+ * Revision 1.7  2002/09/15 23:21:01  xplat
+ * GNU indent normalization.
+ *
  * Revision 1.6  2002/08/18 09:47:26  bjj
  * Finally made free_activation() take a pointer after noticing how !$%^&
  * much time it was taking in a particular profiling run.
