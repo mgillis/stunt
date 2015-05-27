@@ -882,9 +882,12 @@ sys_sbrk(incr)
 }
 #endif				/* VMS */
 
-char rcsid_gnu_malloc[] = "$Id: gnu-malloc.c,v 1.2 1997/03/03 04:18:44 nop Exp $";
+char rcsid_gnu_malloc[] = "$Id: gnu-malloc.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* $Log: gnu-malloc.c,v $
+/* Revision 1.3  2007/09/12 07:33:29  spunky
+/* This is a working version of the current HellMOO server
+/*
 /* Revision 1.2  1997/03/03 04:18:44  nop
 /* GNU Indent normalization
 /*

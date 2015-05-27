@@ -45,6 +45,10 @@ typedef struct {
     void *bi_func_data;
     Var temp;			/* VM's temp register */
 
+    /* waifs mean there can be other values for THIS, and we need a secure
+     * way to store it so the verb can't spoof
+     */
+    Var THIS;
     /* verb information */
     Objid this;
     Objid player;
@@ -53,6 +57,7 @@ typedef struct {
     const char *verb;
     const char *verbname;
     int debug;
+    int cputime;
 } activation;
 
 extern void free_activation(activation a, char data_too);
@@ -108,7 +113,8 @@ extern enum outcome do_server_program_task(Objid this, const char *verb,
 					   Var * result,
 					   int do_db_tracebacks);
 extern enum outcome resume_from_previous_vm(vm the_vm, Var value,
-					    task_kind tk, Var * result);
+					    task_kind tk, Var * result,
+					    int ignore_value);
 
 extern int task_timed_out;
 extern void abort_running_task(void);
@@ -131,6 +137,15 @@ extern int read_activ(activation * a, int which_vector);
 
 /* 
  * $Log: execute.h,v $
+ * Revision 1.5  2010/05/17 04:26:05  blacklite
+ * add bf_cputime for reals
+ *
+ * Revision 1.4  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:17:51  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

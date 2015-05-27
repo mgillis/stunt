@@ -198,8 +198,8 @@ network_process_io(int timeout)
 	    sh = server_new_connection(slistener, nh, 0);
 	    state = STATE_OPEN;
 	    got_some = 1;
-	} else if (timeout != 0)
-	    sleep(timeout);
+	} else if (timeout > 0)
+	    sleep(timeout / 1000000);
 	break;
 
     case STATE_OPEN:
@@ -223,11 +223,11 @@ network_process_io(int timeout)
 		    }
 	    }
 
-	    if (got_some || timeout == 0)
+	    if (got_some || timeout <= 0)
 		goto done;
 
 	    sleep(1);
-	    timeout--;
+	    timeout -= 1000000;
 	}
     }
 
@@ -235,9 +235,12 @@ network_process_io(int timeout)
     return got_some;
 }
 
-char rcsid_net_single[] = "$Id: net_single.c,v 1.2 1997/03/03 04:19:07 nop Exp $";
+char rcsid_net_single[] = "$Id: net_single.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* $Log: net_single.c,v $
+/* Revision 1.3  2007/09/12 07:33:29  spunky
+/* This is a working version of the current HellMOO server
+/*
 /* Revision 1.2  1997/03/03 04:19:07  nop
 /* GNU Indent normalization
 /*

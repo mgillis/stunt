@@ -84,9 +84,12 @@ main(int argc, char **argv)
     exit(0);
 }
 
-char rcsid_client_bsd[] = "$Id: client_bsd.c,v 1.2 1997/03/03 04:18:23 nop Exp $";
+char rcsid_client_bsd[] = "$Id: client_bsd.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* $Log: client_bsd.c,v $
+/* Revision 1.3  2007/09/12 07:33:29  spunky
+/* This is a working version of the current HellMOO server
+/*
 /* Revision 1.2  1997/03/03 04:18:23  nop
 /* GNU Indent normalization
 /*

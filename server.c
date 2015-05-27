@@ -15,6 +15,8 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+#include <errno.h>
+
 #include "my-types.h"		/* must be first on some systems */
 #include "my-signal.h"
 #include "my-stdarg.h"
@@ -35,6 +37,7 @@
 #include "network.h"
 #include "options.h"
 #include "parser.h"
+#include "profiler.h"
 #include "random.h"
 #include "server.h"
 #include "storage.h"
@@ -52,6 +55,7 @@ static pid_t parent_pid;
 int in_child = 0;
 
 static const char *shutdown_message = 0;	/* shut down if non-zero */
+static Stream*     shutdown_stream;             /* the last output stream */
 static int in_emergency_mode = 0;
 static Var checkpointed_connections;
 
@@ -422,7 +426,7 @@ static void
 main_loop(void)
 {
     int i;
-
+	int res;
     /* First, notify DB of disconnections for all checkpointed connections */
     for (i = 1; i <= checkpointed_connections.v.list[0].v.num; i++) {
 	Var v;
@@ -433,7 +437,14 @@ main_loop(void)
     }
     free_var(checkpointed_connections);
 
-    /* Second, run #0:server_started() */
+    /* Open /dev/urandom and keep it open as long as the server is running
+       so that our random() has a source of random bits.  Dev_Random is
+       defined globally in server.h */
+    extern FILE *Dev_Random;
+    Dev_Random = fopen("/dev/urandom", "r");
+    if (Dev_Random == NULL) panic("Couldn't open /dev/urandom");
+
+    /* Next, run #0:server_started() */
     run_server_task(-1, SYSTEM_OBJECT, "server_started", new_list(0), "", 0);
     set_checkpoint_timer(1);
 
@@ -443,8 +454,8 @@ main_loop(void)
 	 * We only care about three cases (== 0, == 1, and > 1), so we can
 	 * map a `never' result from the task subsystem into 2.
 	 */
-	int task_seconds = next_task_start();
-	int seconds_left = task_seconds < 0 ? 2 : task_seconds;
+	int task_useconds = next_task_start();
+	int useconds_left = task_useconds < 0 ? 1000000 : task_useconds;
 	shandle *h, *nexth;
 
 	if (checkpoint_requested != CHKPT_OFF) {
@@ -468,11 +479,7 @@ main_loop(void)
 	    checkpoint_finished = 0;
 	}
 #endif
-
-	if (!network_process_io(seconds_left ? 1 : 0) && seconds_left > 1)
-	    db_flush(FLUSH_ONE_SECOND);
-	else
-	    db_flush(FLUSH_IF_FULL);
+	res = network_process_io(useconds_left);
 
 	run_ready_tasks();
 
@@ -525,8 +532,10 @@ main_loop(void)
 	}
     }
 
+    fclose(Dev_Random);
     oklog("SHUTDOWN: %s\n", shutdown_message);
     send_shutdown_message(shutdown_message);
+    free_stream(shutdown_stream);
 }
 
 static shandle *
@@ -1085,6 +1094,41 @@ player_connected(Objid old_id, Objid new_id, int is_newly_created)
     }
 }
 
+#ifdef CONNECTION_TRANSFERS
+void
+server_connection_transferred(Objid old_id, Objid new_id)
+{
+    /* this is basically player_connected, but quiet */
+
+    shandle *existing_h = find_shandle(new_id);
+    shandle *new_h = find_shandle(old_id);
+        
+    if (!new_h)
+        panic("Connection transferred from non-existent handle");
+            
+    new_h->player = new_id;
+    new_h->connection_time = time(0);
+
+    oklog("TRANSFERRED: %s (#%d) to %s (#%d)\n",
+	db_object_name(old_id), old_id, db_object_name(new_id), new_id);
+
+    if (existing_h) {
+        network_close(existing_h->nhandle);
+        free_shandle(existing_h);
+    }
+
+    Var args;
+
+    args = new_list(2);
+    args.v.list[1].type  = TYPE_OBJ;
+    args.v.list[1].v.obj = old_id;
+    args.v.list[2].type  = TYPE_OBJ;
+    args.v.list[2].v.obj = new_id;
+
+    run_server_task(new_id, new_h->listener, "user_transferred", args, "", 0);
+}
+#endif
+
 void
 notify(Objid player, const char *message)
 {
@@ -1171,7 +1215,9 @@ main(int argc, char **argv)
 {
     char *this_program = str_dup(argv[0]);
     const char *log_file = 0;
+    const char *profile_file = 0;
     int emergency = 0;
+    int recovery = 0;
     Var desc;
     slistener *l;
 
@@ -1185,6 +1231,9 @@ main(int argc, char **argv)
 	case 'e':		/* Emergency wizard mode */
 	    emergency = 1;
 	    break;
+	case 'r':               /* Contents/child rebuild */
+	    recovery = 1;
+	    break;
 	case 'l':		/* Specified log file */
 	    if (argc > 1) {
 		log_file = argv[1];
@@ -1193,6 +1242,14 @@ main(int argc, char **argv)
 	    } else
 		argc = 0;	/* Provoke usage message below */
 	    break;
+        case 'p':               /* Specified profile file */
+	    if (argc > 1) {
+		profile_file = argv[1];
+		argc--;
+		argv++;
+	    } else
+		argc = 0;
+	    break;		/* Provoke usage message below */
 	default:
 	    argc = 0;		/* Provoke usage message below */
 	}
@@ -1212,14 +1269,27 @@ main(int argc, char **argv)
     } else
 	set_log_file(stderr);
 
+    if (profile_file) {
+	FILE *f = fopen(profile_file, "a");
+
+	if (f)
+	    set_profiler_file(f);
+	else {
+	    perror("Error opening specified profile file");
+	    exit(2);
+	}
+    } else
+	set_profiler_file(stdout);
+
     if (!db_initialize(&argc, &argv)
-	|| !network_initialize(argc, argv, &desc)) {
-	fprintf(stderr, "Usage: %s [-e] [-l log-file] %s %s\n",
-		this_program, db_usage_string(), network_usage_string());
-	exit(1);
+		|| !network_initialize(argc, argv, &desc)) {
+		fprintf(stderr, "Usage: %s [-e] [-r] [-l log-file] [-p profile-file] %s %s\n",
+			this_program, db_usage_string(), network_usage_string());
+		exit(1);
     }
     oklog("STARTING: Version %s of the LambdaMOO server\n", server_version);
     oklog("          (Using %s protocol)\n", network_protocol_name());
+    oklog("          (Using File Utilities Package version %s)\n", FUP_version);
     oklog("          (Task timeouts measured in %s seconds.)\n",
 	  virtual_timer_available()? "server CPU" : "wall-clock");
 
@@ -1227,10 +1297,15 @@ main(int argc, char **argv)
 
     l = new_slistener(SYSTEM_OBJECT, desc, 1, 0);
     if (!l) {
-	errlog("Can't create initial connection point!\n");
-	exit(1);
+		errlog("Can't create initial connection point!\n");
+		exit(1);
     }
     free_var(desc);
+
+    if (recovery) {
+		oklog("*** Contents/child list recovery mode ON ***\n");
+	        db_recoverymode(1);
+    }
 
     if (!db_load())
 	exit(1);
@@ -1244,13 +1319,19 @@ main(int argc, char **argv)
     reset_command_history();
 
     if (!emergency || emergency_mode()) {
-	if (!start_listener(l))
-	    exit(1);
+		if (!start_listener(l))
+		    exit(1);
 
-	main_loop();
-	network_shutdown();
+		main_loop();
+		network_shutdown();
     }
+
+#ifdef MEMORY_TRACE
+    verify_mem();
+#endif
+
     db_shutdown();
+
     free_str(this_program);
 
     return 0;
@@ -1328,10 +1409,21 @@ bf_shutdown(Var arglist, Byte next, void *vdata, Objid progr)
     if (msg)
 	stream_printf(s, ": %s", msg);
     shutdown_message = stream_contents(s);
+    shutdown_stream  = s;
 
     free_var(arglist);
     return no_var_pack();
 }
+
+#ifdef MEMORY_TRACE
+static package
+bf_set_live_trace(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    set_live_trace(arglist.v.list[1].v.num);
+    free_var(arglist);
+    return no_var_pack();
+}
+#endif
 
 static package
 bf_dump_database(Var arglist, Byte next, void *vdata, Objid progr)
@@ -1446,6 +1538,23 @@ bf_connected_seconds(Var arglist, Byte next, void *vdata, Objid progr)
 }
 
 static package
+bf_is_connected(Var arglist, Byte next, void *vdata, Objid progr)
+{                               /* (player) */
+    Var r;
+    shandle *h = find_shandle(arglist.v.list[1].v.obj);
+
+    r.type = TYPE_INT;
+    if (h && !h->disconnect_me)
+        r.v.num = 1;
+    else
+        r.v.num = 0;
+    free_var(arglist);
+    
+    return make_var_pack(r);
+}
+
+
+static package
 bf_idle_seconds(Var arglist, Byte next, void *vdata, Objid progr)
 {				/* (player) */
     Var r;
@@ -1505,7 +1614,7 @@ bf_notify(Var arglist, Byte next, void *vdata, Objid progr)
     }
     r.type = TYPE_INT;
     if (h && !h->disconnect_me) {
-	if (h->binary) {
+/*	if (h->binary) { */
 	    int length;
 
 	    line = binary_to_raw_bytes(line, &length);
@@ -1514,8 +1623,8 @@ bf_notify(Var arglist, Byte next, void *vdata, Objid progr)
 		return make_error_pack(E_INVARG);
 	    }
 	    r.v.num = network_send_bytes(h->nhandle, line, length, !no_flush);
-	} else
-	    r.v.num = network_send_line(h->nhandle, line, !no_flush);
+/*	} else
+	    r.v.num = network_send_line(h->nhandle, line, !no_flush); */
     } else {
 	if (in_emergency_mode)
 	    emergency_notify(conn, line);
@@ -1608,6 +1717,38 @@ find_slistener(Var desc)
 
     return 0;
 }
+
+static package
+bf_set_profiler_filename(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    if (!is_wizard(progr)) {
+	free_var(arglist);
+	return make_error_pack(E_PERM);
+    } else {
+	FILE *f = fopen(arglist.v.list[1].v.str, "a");
+
+	if (f) {
+		set_profiler_file(f);
+	        oklog("*** PROFILING FILE CHANGED: now '%s', changed by %s (#%d) ***\n",
+       		    arglist.v.list[1].v.str, db_object_name(progr), progr);
+		free_var(arglist);
+
+		return make_var_pack(zero);
+	} else {
+		char *error;
+
+		error = strerror(errno);
+                oklog("*** PROFILING FILE NOT CHANGED: tried '%s', %s (#%d): %s ***\n",
+                    arglist.v.list[1].v.str, db_object_name(progr), progr, error);
+
+		Var v;
+		v.type = TYPE_STR;
+		v.v.str = str_dup(error);
+		return make_var_pack(v);
+	}
+    }
+}
+
 
 static package
 bf_listen(Var arglist, Byte next, void *vdata, Objid progr)
@@ -1719,6 +1860,7 @@ register_server(void)
     register_function("connected_seconds", 1, 1, bf_connected_seconds,
 		      TYPE_OBJ);
     register_function("idle_seconds", 1, 1, bf_idle_seconds, TYPE_OBJ);
+    register_function("is_connected", 1, 1, bf_is_connected, TYPE_OBJ);
     register_function("connection_name", 1, 1, bf_connection_name, TYPE_OBJ);
     register_function("notify", 2, 3, bf_notify, TYPE_OBJ, TYPE_STR, TYPE_ANY);
     register_function("boot_player", 1, 1, bf_boot_player, TYPE_OBJ);
@@ -1733,12 +1875,46 @@ register_server(void)
     register_function("listeners", 0, 0, bf_listeners);
     register_function("buffered_output_length", 0, 1,
 		      bf_buffered_output_length, TYPE_OBJ);
+    register_function("set_profiler_filename", 1, 1, bf_set_profiler_filename, TYPE_STR);
+#ifdef MEMORY_TRACE
+    register_function("set_live_trace", 1, 1, bf_set_live_trace, TYPE_INT);
+#endif
 }
 
-char rcsid_server[] = "$Id: server.c,v 1.5 1998/12/29 06:56:32 nop Exp $";
+char rcsid_server[] = "$Id: server.c,v 1.11 2010/05/17 01:52:27 blacklite Exp $";
 
 /* 
  * $Log: server.c,v $
+ * Revision 1.11  2010/05/17 01:52:27  blacklite
+ * add set_profiler_filename
+ *
+ * Revision 1.10  2009/07/27 01:46:57  blacklite
+ * typo
+ *
+ * Revision 1.9  2009/07/26 21:57:42  blacklite
+ * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
+ * function and various supporting things. Which don't actually work without
+ * causing segfaults, but, hey, it's a start.
+ *
+ * Revision 1.8  2009/07/25 03:21:59  blacklite
+ * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
+ * (specify with -p). I may still be missing some spots but this seems to give
+ * usable info right now.
+ *
+ * Revision 1.7  2009/07/23 04:22:37  blacklite
+ * added is_connected function.
+ *
+ * Revision 1.6  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.5  2008/08/24 05:06:13  blacklite
+ * Add -r option and more fixes to the recovery process.
+ *
+ * Revision 1.4  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/29 06:56:32  nop
  * Fixed leak in onc().
  *

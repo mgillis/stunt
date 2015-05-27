@@ -19,8 +19,9 @@
 #define Structures_h 1
 
 #include "my-stdio.h"
-
+#include "options.h"
 #include "config.h"
+
 
 typedef int32 Objid;
 
@@ -31,6 +32,8 @@ typedef int32 Objid;
 #define NOTHING		-1
 #define AMBIGUOUS	-2
 #define FAILED_MATCH	-3
+#define ROOT_CLASS      1
+
 
 /* Do not reorder or otherwise modify this list, except to add new elements at
  * the end, since the order here defines the numeric equivalents of the error
@@ -53,7 +56,9 @@ typedef enum {
     TYPE_NONE,			/* in uninitialized MOO variables */
     TYPE_CATCH,			/* on-stack marker for an exception handler */
     TYPE_FINALLY,		/* on-stack marker for a TRY-FINALLY clause */
-    _TYPE_FLOAT			/* floating-point number; user-visible */
+    _TYPE_FLOAT,		/* floating-point number; user-visible */
+    _TYPE_HASH,			/* user-visible */
+    _TYPE_WAIF			/* lightweight object; user-visible */
 } var_type;
 
 /* Types which have external data should be marked with the TYPE_COMPLEX_FLAG
@@ -69,6 +74,8 @@ typedef enum {
 #define TYPE_STR		(_TYPE_STR | TYPE_COMPLEX_FLAG)
 #define TYPE_FLOAT		(_TYPE_FLOAT | TYPE_COMPLEX_FLAG)
 #define TYPE_LIST		(_TYPE_LIST | TYPE_COMPLEX_FLAG)
+#define TYPE_HASH		(_TYPE_HASH | TYPE_COMPLEX_FLAG)
+#define TYPE_WAIF		(_TYPE_WAIF | TYPE_COMPLEX_FLAG)
 
 #define TYPE_ANY ((var_type) -1)	/* wildcard for use in declaring built-ins */
 #define TYPE_NUMERIC ((var_type) -2)	/* wildcard for (integer or float) */
@@ -91,14 +98,42 @@ typedef struct Var Var;
 #pragma pointer_size short
 #endif
 
+struct WaifPropdefs;
+
+/* Try to make struct Waif fit into 32 bytes with this mapsz.  These bytes
+ * are probably "free" (from a powers-of-two allocator) and we can use them
+ * to save lots of space.  With 64bit addresses I think the right value is 8.
+ * If checkpoints are unforked, save space for an index used while saving.
+ * Otherwise we can alias propdefs and clobber it in the child.
+ */
+#ifdef UNFORKED_CHECKPOINTS
+#define WAIF_MAPSZ	2
+#else
+#define WAIF_MAPSZ	3
+#endif
+
+typedef struct Waif {
+	Objid			class;
+	Objid			owner;
+	struct WaifPropdefs	*propdefs;
+	Var			*propvals;
+	unsigned long		map[WAIF_MAPSZ];
+#ifdef UNFORKED_CHECKPOINTS
+	unsigned long		waif_save_index;
+#else
+#define waif_save_index		map[0]
+#endif
+} Waif;
+
 struct Var {
     union {
 	const char *str;	/* STR */
 	int32 num;		/* NUM, CATCH, FINALLY */
 	Objid obj;		/* OBJ */
 	enum error err;		/* ERR */
-	Var *list;		/* LIST */
+	Var *list;		/* LIST, HASH */
 	double *fnum;		/* FLOAT */
+	Waif *waif;		/* WAIF */
     } v;
     var_type type;
 };
@@ -113,6 +148,21 @@ extern Var zero;		/* useful constant */
 
 /* 
  * $Log: structures.h,v $
+ * Revision 1.6  2010/05/16 02:41:03  blacklite
+ * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
+ *
+ * Revision 1.5  2009/07/22 23:19:37  blacklite
+ * added gamevalid(x) == valid(x) && is_a(x,ROOT_CLASS) && is_in(x,TOMB)
+ * also added ROOT_CLASS and TOMB (as #1 and #274249 respectively.)
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:19:04  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

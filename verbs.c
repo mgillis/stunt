@@ -72,6 +72,35 @@ bf_verbs(Var arglist, Byte next, void *vdata, Objid progr)
     }
 }
 
+static package
+bf_has_callable_verb(Var arglist, Byte next, void *vdata, Objid progr)
+{                               /* (object) */
+    Objid oid = arglist.v.list[1].v.obj;
+
+    if (!valid(oid)) {
+	free_var(arglist);
+	return make_error_pack(E_INVARG);
+    } else if (!db_object_allows(oid, progr, FLAG_READ)) {
+	free_var(arglist);
+	return make_error_pack(E_PERM);
+    } else {
+	db_verb_handle vh;
+	Var result;
+
+	vh = db_find_callable_verb(oid, arglist.v.list[2].v.str);
+
+	if (vh.ptr) {
+	    result = new_list(1);
+	    result.v.list[1].type = TYPE_OBJ;
+	    result.v.list[1].v.obj = db_verb_definer(vh);
+	} else {
+	    result = new_list(0);
+	}
+	free_var(arglist);
+	return make_var_pack(result);
+    }
+}
+
 static enum error
 validate_verb_info(Var v, Objid * owner, unsigned *flags, const char **names)
 {
@@ -559,6 +588,7 @@ void
 register_verbs(void)
 {
     register_function("verbs", 1, 1, bf_verbs, TYPE_OBJ);
+    register_function("has_callable_verb", 2, 2, bf_has_callable_verb, TYPE_OBJ, TYPE_STR);
     register_function("verb_info", 2, 2, bf_verb_info, TYPE_OBJ, TYPE_ANY);
     register_function("set_verb_info", 3, 3, bf_set_verb_info,
 		      TYPE_OBJ, TYPE_ANY, TYPE_LIST);
@@ -575,10 +605,22 @@ register_verbs(void)
     register_function("eval", 1, 1, bf_eval, TYPE_STR);
 }
 
-char rcsid_verbs[] = "$Id: verbs.c,v 1.3 1998/12/14 13:19:16 nop Exp $";
+char rcsid_verbs[] = "$Id: verbs.c,v 1.7 2009/07/26 19:59:25 blacklite Exp $";
 
 /* 
  * $Log: verbs.c,v $
+ * Revision 1.7  2009/07/26 19:59:25  blacklite
+ * fix has_callable_verb to return {obj} not obj.
+ *
+ * Revision 1.6  2009/07/25 03:11:19  blacklite
+ * add bf_has_callable_verb and bf_has_property
+ *
+ * Revision 1.5  2008/08/20 18:45:14  blacklite
+ * reverted logging change, since it causes crashes
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:19:16  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

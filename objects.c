@@ -223,6 +223,84 @@ bf_valid(Var arglist, Byte next, void *vdata, Objid progr)
 }
 
 static package
+bf_gamevalid(Var arglist, Byte next, void *vdata, Objid progr)
+{                               /* (object) */
+    static Objid tomb = NOTHING;
+
+    if (!valid(tomb))
+	tomb = NOTHING;
+
+    if (tomb == NOTHING) {
+	Var p;
+	if (valid(SYSTEM_OBJECT)
+	    && db_find_property(SYSTEM_OBJECT, "tomb", &p).ptr
+	    && (p.type == TYPE_OBJ) && valid(p.v.obj)
+	) {
+	    tomb = p.v.obj;
+	} else {
+	    free_var(arglist);
+	    return make_var_pack(zero);
+	}
+    }
+
+    Var r;
+    r.type = TYPE_INT;
+    
+    Objid o = arglist.v.list[1].v.obj;
+
+    r.v.num = valid(o) && is_a(o,ROOT_CLASS) && !is_in(o,tomb);
+    free_var(arglist);
+    return make_var_pack(r);
+}
+
+static package
+bf_area(Var arglist, Byte next, void *vdata, Objid progr)
+{                               /* (object) */
+    static Objid g_area = NOTHING;
+
+    Var result;
+    result.type = TYPE_OBJ;
+
+    if (!valid(g_area))
+	g_area = NOTHING;
+
+    if (g_area == NOTHING) {
+	Var p;
+	if (valid(SYSTEM_OBJECT)
+            && db_find_property(SYSTEM_OBJECT, "area", &p).ptr
+            && (p.type == TYPE_OBJ) && valid(p.v.obj)
+	) {
+	    g_area = p.v.obj;
+	} else {
+	    free_var(arglist);
+	    result.v.obj = NOTHING;
+	    return make_var_pack(result);
+	}
+    }
+
+    Objid o = arglist.v.list[1].v.obj;
+
+    /* you'd think we'd want to start with
+     * loc = o.location, but we do this
+     * in case o is an area itself.
+     */
+    Objid loc = o;
+
+    free_var(arglist);
+
+    while (valid(loc)) {
+	if (is_a(loc, g_area)) {
+		result.v.obj = loc;
+		return make_var_pack(result);
+	}
+	loc = db_object_location(loc);
+    }
+    result.v.obj = NOTHING;
+    return make_var_pack(result);
+}
+
+
+static package
 bf_max_object(Var arglist, Byte next, void *vdata, Objid progr)
 {				/* () */
     Var r;
@@ -592,6 +670,105 @@ bf_object_bytes(Var arglist, Byte next, void *vdata, Objid progr)
     return make_var_pack(v);
 }
 
+static package
+bf_occupants(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    Var r;
+
+    Objid what, parent;
+
+    what = arglist.v.list[1].v.obj;
+    parent = arglist.v.list[2].v.obj;
+
+    if (!valid(what) || !valid(parent))
+        return make_error_pack(E_INVARG);
+
+    db_object_occupants(what, parent, &r);
+
+    free_var(arglist);
+    return make_var_pack(r);
+}
+
+
+static package
+bf_is_a(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    Var r;
+
+    r.type = TYPE_INT;
+    r.v.num = is_a(arglist.v.list[1].v.obj, arglist.v.list[2].v.obj);
+    free_var(arglist);
+    return make_var_pack(r);
+}
+
+static package
+bf_is_in(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    Var r;
+
+    r.type = TYPE_INT;
+    r.v.num = is_in(arglist.v.list[1].v.obj, arglist.v.list[2].v.obj);
+    free_var(arglist);
+    return make_var_pack(r);
+}
+
+static package
+bf_is_in_a(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    Var r;
+
+    r.type = TYPE_INT;
+    r.v.num = is_in_a(arglist.v.list[1].v.obj, arglist.v.list[2].v.obj);
+    free_var(arglist);
+    return make_var_pack(r);
+}
+
+static package
+bf_first_in(Var arglist, Byte next, void *vdata, Objid progr)
+{       
+        Var r;
+        
+        r.type = TYPE_OBJ;
+        r.v.obj = db_first_contents(arglist.v.list[1].v.obj);
+        free_var(arglist);
+        return make_var_pack(r);
+}
+
+static package
+bf_last_in(Var arglist, Byte next, void *vdata, Objid progr)
+{
+        Var r;
+
+        r.type = TYPE_OBJ;
+        r.v.obj = db_last_contents(arglist.v.list[1].v.obj);
+        free_var(arglist);
+        return make_var_pack(r);
+}
+
+
+static package
+bf_first_child(Var arglist, Byte next, void *vdata, Objid progr)
+{       
+        Var r;
+
+        r.type = TYPE_OBJ;
+        r.v.obj = db_first_child(arglist.v.list[1].v.obj);
+        free_var(arglist);
+        return make_var_pack(r);
+}
+
+static package
+bf_last_child(Var arglist, Byte next, void *vdata, Objid progr)
+{
+        Var r;
+
+        r.type = TYPE_OBJ;
+        r.v.obj = db_last_child(arglist.v.list[1].v.obj);
+        free_var(arglist);
+        return make_var_pack(r);
+}
+
+
 void
 register_objects(void)
 {
@@ -605,6 +782,8 @@ register_objects(void)
 				      TYPE_OBJ);
     register_function("object_bytes", 1, 1, bf_object_bytes, TYPE_OBJ);
     register_function("valid", 1, 1, bf_valid, TYPE_OBJ);
+    register_function("gamevalid", 1, 1, bf_gamevalid, TYPE_OBJ);
+    register_function("area", 1, 1, bf_area, TYPE_OBJ);
     register_function("parent", 1, 1, bf_parent, TYPE_OBJ);
     register_function("children", 1, 1, bf_children, TYPE_OBJ);
     register_function("chparent", 2, 2, bf_chparent, TYPE_OBJ, TYPE_OBJ);
@@ -616,12 +795,55 @@ register_objects(void)
     register_function_with_read_write("move", 2, 2, bf_move,
 				      bf_move_read, bf_move_write,
 				      TYPE_OBJ, TYPE_OBJ);
+    register_function("occupants", 2, 2, bf_occupants, TYPE_OBJ, TYPE_OBJ);
+    register_function("is_a", 2, 2, bf_is_a, TYPE_OBJ, TYPE_OBJ);
+    register_function("is_in", 2, 2, bf_is_in, TYPE_OBJ, TYPE_OBJ);
+    register_function("is_in_a", 2, 2, bf_is_in_a, TYPE_OBJ, TYPE_OBJ);
+    register_function("first_in", 1, 1, bf_first_in, TYPE_OBJ);
+    register_function("last_in", 1, 1, bf_last_in, TYPE_OBJ);
+    register_function("first_child", 1, 1, bf_first_child, TYPE_OBJ);
+    register_function("last_child", 1, 1, bf_last_child, TYPE_OBJ);
 }
 
-char rcsid_objects[] = "$Id: objects.c,v 1.4 1998/12/14 13:18:39 nop Exp $";
+char rcsid_objects[] = "$Id: objects.c,v 1.14 2010/05/17 07:25:35 blacklite Exp $";
 
 /* 
  * $Log: objects.c,v $
+ * Revision 1.14  2010/05/17 07:25:35  blacklite
+ * last fixes for 1.10.4
+ *
+ * Revision 1.13  2010/05/17 01:49:02  blacklite
+ * add bf_occupants
+ *
+ * Revision 1.12  2010/05/16 02:41:03  blacklite
+ * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
+ *
+ * Revision 1.11  2009/10/11 18:31:09  blacklite
+ * ha, is_in_a should probably call bf_is_in_a
+ *
+ * Revision 1.10  2009/07/27 01:46:43  blacklite
+ * bf_is_in_a
+ *
+ * Revision 1.9  2009/07/25 06:45:33  blacklite
+ * change area() behaviour so area(an_area) == an_area
+ *
+ * Revision 1.8  2009/07/25 03:10:58  blacklite
+ * add bf_area to find the area of an object, and make bf_gamevalid a little
+ * less unwieldly with a shorter var name
+ *
+ * Revision 1.7  2009/07/23 05:05:00  blacklite
+ * gamevalid() fixes
+ *
+ * Revision 1.6  2009/07/22 23:19:37  blacklite
+ * added gamevalid(x) == valid(x) && is_a(x,ROOT_CLASS) && is_in(x,TOMB)
+ * also added ROOT_CLASS and TOMB (as #1 and #274249 respectively.)
+ *
+ * Revision 1.5  2009/07/22 23:14:23  blacklite
+ * add internal is_a and is_in, and moo functions which pass to each.
+ *
+ * Revision 1.4  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:18:39  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

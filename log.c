@@ -38,6 +38,12 @@ set_log_file(FILE * f)
     log_file = f;
 }
 
+FILE*
+get_log_file()
+{
+	return log_file;
+}
+
 static void
 do_log(const char *fmt, va_list args, const char *prefix)
 {
@@ -149,10 +155,18 @@ register_log(void)
     register_function("server_log", 1, 2, bf_server_log, TYPE_STR, TYPE_ANY);
 }
 
-char rcsid_log[] = "$Id: log.c,v 1.3 1998/12/14 13:17:59 nop Exp $";
+char rcsid_log[] = "$Id: log.c,v 1.4 2009/03/08 12:41:31 blacklite Exp $";
 
 /* 
  * $Log: log.c,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:17:59  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

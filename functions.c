@@ -54,7 +54,10 @@ static registry bi_function_registries[] =
     register_property,
     register_server,
     register_tasks,
-    register_verbs
+    register_verbs,
+    register_hash,
+    register_waif,
+    register_files
 };
 
 void
@@ -454,10 +457,18 @@ register_functions(void)
     register_function("load_server_options", 0, 0, bf_load_server_options);
 }
 
-char rcsid_functions[] = "$Id: functions.c,v 1.5 1998/12/14 13:17:53 nop Exp $";
+char rcsid_functions[] = "$Id: functions.c,v 1.4 2009/03/08 12:41:31 blacklite Exp $";
 
 /* 
  * $Log: functions.c,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:17:53  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

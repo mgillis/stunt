@@ -60,6 +60,30 @@ bf_properties(Var arglist, Byte next, void *vdata, Objid progr)
     }
 }
 
+static package
+bf_has_property(Var arglist, Byte next, void *vdata, Objid progr)
+{                               /* (object) */
+    Objid oid = arglist.v.list[1].v.obj;
+
+    if (!valid(oid)) {
+        free_var(arglist);
+        return make_error_pack(E_INVARG);
+    } else if (!db_object_allows(oid, progr, FLAG_READ)) {
+        free_var(arglist);
+        return make_error_pack(E_PERM);
+    } else {
+        Var result;
+        result.type = TYPE_INT;
+    
+        if (db_find_property(oid, arglist.v.list[2].v.str, 0).ptr) {
+                result.v.num = 1;
+        } else {
+                result.v.num = 0;
+        }                       
+        free_var(arglist);
+        return make_var_pack(result);
+    }
+}
 
 static package
 bf_prop_info(Var arglist, Byte next, void *vdata, Objid progr)
@@ -95,6 +119,8 @@ bf_prop_info(Var arglist, Byte next, void *vdata, Objid progr)
 	*s++ = 'w';
     if (flags & PF_CHOWN)
 	*s++ = 'c';
+    if (flags & PF_PRIVATE)
+	*s++ = 'p';
     *s = '\0';
 
     return make_var_pack(r);
@@ -129,6 +155,10 @@ validate_prop_info(Var v, Objid * owner, unsigned *flags, const char **name)
 	case 'c':
 	case 'C':
 	    *flags |= PF_CHOWN;
+	    break;
+	case 'p':
+	case 'P':
+	    *flags |= PF_PRIVATE;
 	    break;
 	default:
 	    return E_INVARG;
@@ -315,6 +345,8 @@ void
 register_property(void)
 {
     (void) register_function("properties", 1, 1, bf_properties, TYPE_OBJ);
+    (void) register_function("has_property", 2, 2, bf_has_property,
+			     TYPE_OBJ, TYPE_STR);
     (void) register_function("property_info", 2, 2, bf_prop_info,
 			     TYPE_OBJ, TYPE_STR);
     (void) register_function("set_property_info", 3, 3, bf_set_prop_info,
@@ -329,10 +361,19 @@ register_property(void)
 			     TYPE_OBJ, TYPE_STR);
 }
 
-char rcsid_property[] = "$Id: property.c,v 1.3 1998/12/14 13:18:50 nop Exp $";
+char rcsid_property[] = "$Id: property.c,v 1.5 2009/07/25 03:11:19 blacklite Exp $";
 
 /* 
  * $Log: property.c,v $
+ * Revision 1.5  2009/07/25 03:11:19  blacklite
+ * add bf_has_callable_verb and bf_has_property
+ *
+ * Revision 1.4  2009/03/27 20:24:37  blacklite
+ * add PF_PRIVATE flag to props
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:18:50  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

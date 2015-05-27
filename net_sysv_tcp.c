@@ -350,9 +350,12 @@ proto_open_connection(Var arglist, int *read_fd, int *write_fd,
 }
 #endif				/* OUTBOUND_NETWORK */
 
-char rcsid_net_sysv_tcp[] = "$Id: net_sysv_tcp.c,v 1.2 1997/03/03 04:19:09 nop Exp $";
+char rcsid_net_sysv_tcp[] = "$Id: net_sysv_tcp.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* $Log: net_sysv_tcp.c,v $
+/* Revision 1.3  2007/09/12 07:33:29  spunky
+/* This is a working version of the current HellMOO server
+/*
 /* Revision 1.2  1997/03/03 04:19:09  nop
 /* GNU Indent normalization
 /*

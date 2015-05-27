@@ -18,6 +18,10 @@
 #ifndef Storage_h
 #define Storage_h 1
 
+/* #define FAKE_FREE 1 */
+/* #define MEMORY_TRACE 1 */
+/* #define MEMORY_TRACE_TYPE M_LIST */
+
 #include "config.h"
 #include "structures.h"
 #include "ref_count.h"
@@ -35,6 +39,10 @@ typedef enum Memory_Type {
     M_REF_ENTRY, M_REF_TABLE, M_VC_ENTRY, M_VC_TABLE, M_STRING_PTRS,
     M_INTERN_POINTER, M_INTERN_ENTRY, M_INTERN_HUNK,
 
+    M_HASH,
+
+    M_WAIF, M_WAIF_XTRA,
+
     Sizeof_Memory_Type
 
 } Memory_Type;
@@ -47,6 +55,12 @@ extern void myfree(void *where, Memory_Type type);
 extern void *mymalloc(unsigned size, Memory_Type type);
 extern void *myrealloc(void *where, unsigned size, Memory_Type type);
 
+#ifdef MEMORY_TRACE
+extern int record_ref(void *ptr, int change);
+extern void verify_mem(void);
+extern int set_live_trace(int);
+#endif
+
 static inline void    /* XXX was extern, fix for non-gcc compilers */
 free_str(const char *s)
 {
@@ -58,6 +72,17 @@ free_str(const char *s)
 
 /* 
  * $Log: storage.h,v $
+ * Revision 1.5  2009/08/14 16:48:13  blacklite
+ * add special handling for memory tracing when FAKE_FREE is on, basically emulate the sort of thing that valgrind et al do, don't free anything, and then abort if old, supposedly-freed memory gets used. also move checks to the front in ref_count.h macros so they happen -before- the actual pointer dereference, so we abort before a double free.
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:19:00  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

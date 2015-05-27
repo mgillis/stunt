@@ -118,7 +118,7 @@ match_object(Objid player, const char *name)
 {
     if (name[0] == '\0')
 	return NOTHING;
-    if (name[0] == '#') {
+    if ((name[0] == '#') && (is_programmer(player))) {
 	char *p;
 	Objid r = strtol(name + 1, &p, 10);
 
@@ -135,10 +135,16 @@ match_object(Objid player, const char *name)
     return match_contents(player, name);
 }
 
-char rcsid_match[] = "$Id: match.c,v 1.3 1998/12/14 13:18:02 nop Exp $";
+char rcsid_match[] = "$Id: match.c,v 1.4 2007/09/12 07:45:10 spunky Exp $";
 
 /* 
  * $Log: match.c,v $
+ * Revision 1.4  2007/09/12 07:45:10  spunky
+ * Hacked it so players can't use obj#s to refer to things.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:18:02  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

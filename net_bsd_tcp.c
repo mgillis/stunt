@@ -277,10 +277,16 @@ proto_open_connection(Var arglist, int *read_fd, int *write_fd,
 }
 #endif				/* OUTBOUND_NETWORK */
 
-char rcsid_net_bsd_tcp[] = "$Id: net_bsd_tcp.c,v 1.3 1998/12/14 13:18:27 nop Exp $";
+char rcsid_net_bsd_tcp[] = "$Id: net_bsd_tcp.c,v 1.5 2009/10/11 00:23:43 blacklite Exp $";
 
 /* 
  * $Log: net_bsd_tcp.c,v $
+ * Revision 1.5  2009/10/11 00:23:43  blacklite
+ * rollback raw ip address add
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:18:27  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

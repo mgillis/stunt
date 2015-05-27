@@ -38,6 +38,10 @@ extern int db_initialize(int *pargc, char ***pargv);
 				 * database args were valid.
 				 */
 
+extern void db_recoverymode(int set_on);
+				/* Turn contents/child list rebuilding on.
+				 */
+
 extern int db_load(void);
 				/* Does any necessary long-running preparations
 				 * of the database, such as loading significant
@@ -161,6 +165,13 @@ extern int db_for_all_contents(Objid,
 				 */
 extern void db_change_location(Objid oid, Objid location);
 
+extern Objid db_first_child(Objid);
+extern Objid db_last_child(Objid);
+
+extern Objid db_first_contents(Objid);
+extern Objid db_last_contents(Objid);
+extern void db_object_occupants(Objid oid_what, Objid oid_parent, Var* v);
+
 /* NOTE: New flags must always be added to the end of this list, rather than
  *     replacing one of the obsolete ones, since old databases might have
  *       old objects around that still have that flag set.
@@ -186,6 +197,9 @@ extern int db_object_allows(Objid oid, Objid progr,
 extern int is_wizard(Objid oid);
 extern int is_programmer(Objid oid);
 extern int is_user(Objid oid);
+extern int is_a(Objid oid_what, Objid oid_parent);
+extern int is_in(Objid oid_what, Objid oid_where);
+extern int is_in_a(Objid oid_what, Objid oid_type_of_location);
 
 extern Var db_all_users(void);
 				/* db_all_users() does not change the reference
@@ -193,14 +207,15 @@ extern Var db_all_users(void);
 				 * module.  The caller should thus var_ref() it
 				 * to make it persistent.
 				 */
-
+
 
 /**** properties *****/
 
 typedef enum {
-    PF_READ = 01,
-    PF_WRITE = 02,
-    PF_CHOWN = 04
+    PF_READ = 0x1,
+    PF_WRITE = 0x2,
+    PF_CHOWN = 0x4,
+    PF_PRIVATE = 0x8
 } db_prop_flag;
 
 extern int db_add_propdef(Objid oid, const char *pname,
@@ -518,6 +533,27 @@ extern void db_delete_verb(db_verb_handle);
 
 /* 
  * $Log: db.h,v $
+ * Revision 1.9  2010/05/17 01:49:02  blacklite
+ * add bf_occupants
+ *
+ * Revision 1.8  2010/05/16 02:41:03  blacklite
+ * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
+ *
+ * Revision 1.7  2009/07/27 01:45:54  blacklite
+ * add is_in_a
+ *
+ * Revision 1.6  2009/07/22 23:14:23  blacklite
+ * add internal is_a and is_in, and moo functions which pass to each.
+ *
+ * Revision 1.5  2009/03/27 20:24:37  blacklite
+ * add PF_PRIVATE flag to props
+ *
+ * Revision 1.4  2008/08/24 05:06:13  blacklite
+ * Add -r option and more fixes to the recovery process.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:17:32  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

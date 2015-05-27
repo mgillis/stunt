@@ -32,6 +32,12 @@ enum Extended_Opcode {
     EOP_WHILE_ID, EOP_EXIT, EOP_EXIT_ID,
     EOP_SCATTER, EOP_EXP,
 
+    /* the magic of hashes */
+    EOP_MAKE_HASHENTRY, EOP_MAKE_HASH,
+    
+    /* it's like we really have a scheduler */
+    EOP_YIELD, EOP_YIELD0,
+
     Last_Extended_Opcode = 255
 };
 
@@ -124,6 +130,17 @@ typedef enum Extended_Opcode Extended_Opcode;
 
 /* 
  * $Log: opcode.h,v $
+ * Revision 1.5  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:18:40  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

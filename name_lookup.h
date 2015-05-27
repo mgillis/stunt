@@ -8,11 +8,11 @@
   makes no warranty about the software, its performance or its conformity to
   any specification.  Any person obtaining a copy of this software is requested
   to send their name and post office or electronic mail address to:
-    Pavel Curtis
-    Xerox PARC
-    3333 Coyote Hill Rd.
-    Palo Alto, CA 94304
-    Pavel@Xerox.Com
+	Pavel Curtis
+	Xerox PARC
+	3333 Coyote Hill Rd.
+	Palo Alto, CA 94304
+	Pavel@Xerox.Com
  *****************************************************************************/
 
 /*
@@ -27,31 +27,37 @@
 #include "config.h"
 
 extern int initialize_name_lookup(void);
-				/* Initialize the module, returning true iff
-				 * this succeeds.
-				 */
+								/* Initialize the module, returning true iff
+								 * this succeeds.
+								 */
 
 extern unsigned32 lookup_addr_from_name(const char *name,
-					unsigned timeout);
-				/* Translate a host name to a 32-bit
-				 * internet address in host byte order.  If
-				 * anything goes wrong, return 0.  Dotted
-				 * decimal address are translated properly.
-				 */
+										unsigned timeout);
+								/* Translate a host name to a 32-bit
+								 * internet address in host byte order.  If
+								 * anything goes wrong, return 0.  Dotted
+								 * decimal address are translated properly.
+								 */
 
 extern const char *lookup_name_from_addr(struct sockaddr_in *addr,
-					 unsigned timeout);
-				/* Translate an internet address, contained
-				 * in the sockaddr_in, to a host name.  If
-				 * the translation cannot be done, the
-				 * address is returned in dotted decimal
-				 * form.
-				 */
+										 unsigned timeout);
+								/* Translate an internet address, contained
+								 * in the sockaddr_in, to a host name.  If
+								 * the translation cannot be done, the
+								 * address is returned in dotted decimal
+								 * form.
+								 */
 
-#endif				/* Name_Lookup_H */
+#endif								/* Name_Lookup_H */
 
 /* 
  * $Log: name_lookup.h,v $
+ * Revision 1.4  2010/05/16 02:39:23  blacklite
+ * Break out some IPC stuff into pipe_utils.c, add var serialization, and some unfinished mysql stuff
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:18:26  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

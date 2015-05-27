@@ -559,6 +559,16 @@ decompile(Bytecodes bc, Byte * start, Byte * end, Stmt ** stmt_sink,
 		case EOP_EXP:
 		    kind = EXPR_EXP;
 		    goto finish_binary;
+		case EOP_MAKE_HASHENTRY:
+		    kind = EXPR_HASHENTRY;
+		    goto finish_binary;
+		case EOP_MAKE_HASH:
+		    {
+			e = alloc_expr(EXPR_HASH);
+			e->e.list = alloc_arg_list(ARG_NORMAL, pop_expr());
+			push_expr(HOT_OP1(e->e.list->expr, e));
+		    }
+		    break;
 		case EOP_SCATTER:
 		    {
 			Scatter *sc, **scp;
@@ -796,7 +806,13 @@ decompile(Bytecodes bc, Byte * start, Byte * end, Stmt ** stmt_sink,
 			s->kind = STMT_CONTINUE;
 		    ADD_STMT(HOT_OP(s));
 		    break;
-		default:
+		case EOP_YIELD:
+		case EOP_YIELD0:
+		    s = alloc_stmt(STMT_YIELD);
+		    e = s->s.expr = (eop == EOP_YIELD ? pop_expr() : 0);
+		    ADD_STMT(HOT(op_hot || (e && e == hot_node), s));
+		    break;
+	    	default:
 		    panic("Unknown extended opcode in DECOMPILE!");
 		}
 	    }
@@ -919,6 +935,7 @@ find_hot_node(Stmt * stmt)
 	case STMT_RETURN:
 	case STMT_BREAK:
 	case STMT_CONTINUE:
+	case STMT_YIELD:
 	    /* Nothing more to do */
 	    break;
 	case STMT_TRY_EXCEPT:
@@ -990,10 +1007,24 @@ find_line_number(Program * prog, int vector, int pc)
     return lineno;
 }
 
-char rcsid_decompile[] = "$Id: decompile.c,v 1.5 1999/08/11 08:23:40 bjj Exp $";
+char rcsid_decompile[] = "$Id: decompile.c,v 1.6 2009/03/28 02:50:16 blacklite Exp $";
 
 /* 
  * $Log: decompile.c,v $
+ * Revision 1.6  2009/03/28 02:50:16  blacklite
+ * fixed improper comparison in decompile for EOP_YIELD which resulted in erroneous decompilation -- they would be treated as EOP_YIELD0 and emit STMT_YIELD with no attached expr.
+ *
+ * Revision 1.5  2009/03/27 21:34:36  blacklite
+ * add decompile support for new yield changes (also should have been in previous commits, I really suck at cvs
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1999/08/11 08:23:40  bjj
  * Lineno computation could be wrong for forked vectors.
  *

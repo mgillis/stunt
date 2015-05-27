@@ -169,9 +169,12 @@ proto_close_listener(int fd)
     errlog("Can't find fd in PROTO_CLOSE_LISTENER!\n");
 }
 
-char rcsid_net_bsd_lcl[] = "$Id: net_bsd_lcl.c,v 1.2 1997/03/03 04:19:02 nop Exp $";
+char rcsid_net_bsd_lcl[] = "$Id: net_bsd_lcl.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* $Log: net_bsd_lcl.c,v $
+/* Revision 1.3  2007/09/12 07:33:29  spunky
+/* This is a working version of the current HellMOO server
+/*
 /* Revision 1.2  1997/03/03 04:19:02  nop
 /* GNU Indent normalization
 /*

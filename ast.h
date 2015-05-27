@@ -92,6 +92,7 @@ enum Expr_Kind {
     EXPR_EQ, EXPR_NE, EXPR_LT, EXPR_LE, EXPR_GT, EXPR_GE,
     EXPR_IN, EXPR_LIST, EXPR_COND,
     EXPR_CATCH, EXPR_LENGTH, EXPR_SCATTER,
+    EXPR_HASHENTRY, EXPR_HASH,
     SizeOf_Expr_Kind		/* The last element is also the number of elements... */
 };
 
@@ -170,7 +171,8 @@ struct Stmt_Finally {
 
 enum Stmt_Kind {
     STMT_COND, STMT_LIST, STMT_RANGE, STMT_WHILE, STMT_FORK, STMT_EXPR,
-    STMT_RETURN, STMT_TRY_EXCEPT, STMT_TRY_FINALLY, STMT_BREAK, STMT_CONTINUE
+    STMT_RETURN, STMT_TRY_EXCEPT, STMT_TRY_FINALLY, STMT_BREAK, STMT_CONTINUE,
+    STMT_YIELD
 };
 
 union Stmt_Data {
@@ -215,6 +217,14 @@ extern void free_stmt(Stmt *);
 
 /* 
  * $Log: ast.h,v $
+ * Revision 1.4  2009/03/08 12:41:30  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:17:28  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

@@ -59,6 +59,9 @@ first_user_slot(DB_Version version)
 
     if (version >= DBV_Float)
 	count += 2;
+	
+    if (version >= DBV_Hash)
+	count += 1;
 
     return count;
 }
@@ -94,6 +97,10 @@ new_builtin_names(DB_Version version)
 	if (version >= DBV_Float) {
 	    bi->names[SLOT_INT] = str_dup("INT");
 	    bi->names[SLOT_FLOAT] = str_dup("FLOAT");
+	}
+	
+	if (version >= DBV_Hash) {
+	    bi->names[SLOT_HASH] = str_dup("HASH");
 	}
     }
     return copy_names(builtins[version]);
@@ -146,10 +153,18 @@ free_names(Names * names)
     myfree(names, M_NAMES);
 }
 
-char rcsid_sym_table[] = "$Id: sym_table.c,v 1.3 1998/12/14 13:19:05 nop Exp $";
+char rcsid_sym_table[] = "$Id: sym_table.c,v 1.4 2009/03/08 12:41:31 blacklite Exp $";
 
 /* 
  * $Log: sym_table.c,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:19:05  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

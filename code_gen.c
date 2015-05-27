@@ -700,6 +700,12 @@ generate_expr(Expr * expr, State * state)
 	emit_extended_byte(EOP_EXP, state);
 	pop_stack(1, state);
 	break;
+    case EXPR_HASHENTRY:
+	generate_expr(expr->e.bin.lhs, state);
+	generate_expr(expr->e.bin.rhs, state);
+	emit_extended_byte(EOP_MAKE_HASHENTRY, state);
+	pop_stack(1, state);
+	break;
     case EXPR_INDEX:
 	{
 	    unsigned old;
@@ -739,6 +745,10 @@ generate_expr(Expr * expr, State * state)
 	break;
     case EXPR_LIST:
 	generate_arg_list(expr->e.list, state);
+	break;
+    case EXPR_HASH:
+	generate_arg_list(expr->e.list, state);
+	emit_extended_byte(EOP_MAKE_HASH, state);
 	break;
     case EXPR_CALL:
 	generate_arg_list(expr->e.call.args, state);
@@ -1011,6 +1021,14 @@ generate_stmt(Stmt * stmt, State * state)
 		pop_stack(1, state);
 	    } else
 		emit_ending_op(OP_RETURN0, state);
+	    break;
+	case STMT_YIELD:
+	    if (stmt->s.expr) {
+		generate_expr(stmt->s.expr, state);
+		emit_extended_byte(EOP_YIELD, state);
+		pop_stack(1, state);
+	    } else
+		emit_extended_byte(EOP_YIELD0, state);
 	    break;
 	case STMT_TRY_EXCEPT:
 	    {
@@ -1353,10 +1371,21 @@ generate_code(Stmt * stmt, DB_Version version)
     return prog;
 }
 
-char rcsid_code_gen[] = "$Id: code_gen.c,v 1.9 1999/08/14 19:44:15 bjj Exp $";
+char rcsid_code_gen[] = "$Id: code_gen.c,v 1.5 2009/03/27 20:26:48 blacklite Exp $";
 
 /* 
  * $Log: code_gen.c,v $
+ * Revision 1.5  2009/03/27 20:26:48  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.4  2009/03/08 12:41:30  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.9  1999/08/14 19:44:15  bjj
  * Code generator will no longer PUSH_CLEAR things like dobj/dobjstr/prepstr
  * around CALL_VERB operations, since those variables are passed directly

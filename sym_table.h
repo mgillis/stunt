@@ -55,10 +55,21 @@ extern void free_names(Names *);
 #define SLOT_INT	16
 #define SLOT_FLOAT	17
 
+/* Added in DBV_Hash:  */
+#define SLOT_HASH	18
+
 #endif				/* !Sym_Table_h */
 
 /* 
  * $Log: sym_table.h,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:19:06  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

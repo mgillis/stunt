@@ -756,10 +756,13 @@ db_verb_allows(db_verb_handle h, Objid progr, db_verb_flag flag)
 }
 
 
-char rcsid_db_verbs[] = "$Id: db_verbs.c,v 1.5 1998/12/14 13:17:39 nop Exp $";
+char rcsid_db_verbs[] = "$Id: db_verbs.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* 
  * $Log: db_verbs.c,v $
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:17:39  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

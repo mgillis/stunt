@@ -95,6 +95,11 @@ fill_in_rt_consts(Var * env, DB_Version version)
 	v.v.num = (int) _TYPE_FLOAT;
 	env[SLOT_FLOAT] = var_ref(v);
     }
+
+    if (version >= DBV_Hash) {
+	v.v.num = (int) _TYPE_HASH;
+	env[SLOT_HASH] = var_ref(v);
+    }
 }
 
 void
@@ -121,11 +126,19 @@ set_rt_env_var(Var * env, int slot, Var v)
     env[slot] = v;
 }
 
-char rcsid_rt_env[] = "$Id: eval_env.c,v 1.5 1998/12/14 13:17:44 nop Exp $";
+char rcsid_rt_env[] = "$Id: eval_env.c,v 1.4 2009/03/08 12:41:31 blacklite Exp $";
 
 
 /* 
  * $Log: eval_env.c,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:17:44  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

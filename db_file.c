@@ -38,9 +38,11 @@
 #include "tasks.h"
 #include "timers.h"
 #include "version.h"
+#include "waif.h"
 
 static char *input_db_name, *dump_db_name;
 static int dump_generation = 0;
+static int recovery_mode = 0;
 static const char *header_format_string
 = "** LambdaMOO Database, Format Version %u **\n";
 
@@ -131,10 +133,12 @@ read_object(void)
     o->location = dbio_read_objid();
     o->contents = dbio_read_objid();
     o->next = dbio_read_objid();
+    o->lastcontents = NOTHING;
 
     o->parent = dbio_read_objid();
     o->child = dbio_read_objid();
     o->sibling = dbio_read_objid();
+    o->lastchild = NOTHING;
 
     o->verbdefs = 0;
     prevv = &(o->verbdefs);
@@ -196,6 +200,7 @@ write_object(Objid oid)
     dbio_write_objid(o->parent);
     dbio_write_objid(o->child);
     dbio_write_objid(o->sibling);
+    
 
     for (v = o->verbdefs, nverbdefs = 0; v; v = v->next)
 	nverbdefs++;
@@ -272,12 +277,79 @@ validate_hierarchies()
 	errlog("VALIDATE: Fixed %d should-be-null next pointer(s) ...\n",
 	       fixed_nexts);
 
+    /*
+     * The next two phases are only done if the moo is launched with -r
+     * and can be used with DBs that have broken hierarchies.
+     */
+    if (recovery_mode) {
+    oklog("EMERGENCY REBUILD PHASE 1: Removing old contents and child lists ...\n");
+    for (oid = 0, log_oid = PROGRESS_INTERVAL; oid < size; oid++) {
+        Object *o = dbpriv_find_object(oid);
+        
+        MAYBE_LOG_PROGRESS;
+        if (o) {
+           o->contents = NOTHING;
+           o->next = NOTHING;
+           o->child = NOTHING;
+           o->sibling = NOTHING;
+        }
+    }
+
+    oklog("EMERGENCY REBUILD PHASE 2: Rebuilding contents and child lists ...\n");
+    for (oid = 0, log_oid = PROGRESS_INTERVAL; oid < size; oid++) {
+        Object *o = dbpriv_find_object(oid);
+
+        MAYBE_LOG_PROGRESS;
+        if (o) {
+            /* find this obj's parent & loc */
+         
+            Objid parent = o->parent;
+            Objid location = o->location;
+
+            if (parent != NOTHING) {
+              Object *po = dbpriv_find_object(parent);
+              Objid lastchild = po->lastchild;
+              
+              if (lastchild != NOTHING) {
+                 Object *co = dbpriv_find_object(lastchild);
+
+                 co->sibling = oid;
+                 po->lastchild = oid;
+              }
+              else {
+                 po->child = oid;
+                 po->lastchild = oid;
+              }
+           }
+        
+            if (location != NOTHING) {
+              Object *lo = dbpriv_find_object(location);
+              Objid lastcontents = lo->lastcontents;
+
+              if (lastcontents != NOTHING) {
+                 Object *co = dbpriv_find_object(lastcontents);
+
+                 co->next = oid;
+                 lo->lastcontents = oid;
+              }
+              else {
+                 lo->contents = oid;
+                 lo->lastcontents = oid;
+              }
+           }
+         
+        } /* endif o */
+    } /* for oid */              
+    } /* recovery_mode */ 
+
     oklog("VALIDATE: Phase 2: Check for cycles ...\n");
     for (oid = 0, log_oid = PROGRESS_INTERVAL; oid < size; oid++) {
 	Object *o = dbpriv_find_object(oid);
+	Objid list_end;
 
 	MAYBE_LOG_PROGRESS;
 	if (o) {
+
 #	    define CHECK(start, field, name)				\
 	    {								\
 	        Objid	oid2 = start;					\
@@ -290,13 +362,21 @@ validate_hierarchies()
 			broken = 1;					\
 			break;						\
 		    }							\
+		    list_end = oid2;					\
 		}							\
 	    }
 
 	    CHECK(o->parent, parent, "parent");
+
+	    list_end = NOTHING;
 	    CHECK(o->child, sibling, "child");
+	    o->lastchild = list_end;
+
 	    CHECK(o->location, location, "location");
+
+	    list_end = NOTHING;
 	    CHECK(o->contents, next, "contents");
+	    o->lastcontents = list_end;
 
 #	    undef CHECK
 	}
@@ -304,61 +384,6 @@ validate_hierarchies()
 
     if (broken)			/* Can't continue if cycles found */
 	return 0;
-
-    oklog("VALIDATE: Phase 3: Check for inconsistencies ...\n");
-    for (oid = 0, log_oid = PROGRESS_INTERVAL; oid < size; oid++) {
-	Object *o = dbpriv_find_object(oid);
-
-	MAYBE_LOG_PROGRESS;
-	if (o) {
-#	    define CHECK(up, up_name, down, down_name, across)		\
-	    {								\
-		Objid	up = o->up;					\
-		Objid	oid2;						\
-									\
-		/* Is oid in its up's down list? */			\
-		if (up != NOTHING) {					\
-		    for (oid2 = dbpriv_find_object(up)->down;		\
-			 oid2 != NOTHING;				\
-			 oid2 = dbpriv_find_object(oid2)->across) {	\
-			if (oid2 == oid) /* found it */			\
-			    break;					\
-		    }							\
-		    if (oid2 == NOTHING) { /* didn't find it */		\
-			errlog("VALIDATE: #%d not in %s (#%d)'s %s list.\n", \
-			       oid, up_name, up, down_name);	        \
-			broken = 1;					\
-		    }							\
-		}							\
-	    }
-
-	    CHECK(parent, "parent", child, "child", sibling);
-	    CHECK(location, "location", contents, "contents", next);
-
-#	    undef CHECK
-
-#	    define CHECK(up, down, down_name, across)			\
-	    {								\
-		Objid	oid2;						\
-									\
-		for (oid2 = o->down;					\
-		     oid2 != NOTHING;					\
-		     oid2 = dbpriv_find_object(oid2)->across) {		\
-		    if (dbpriv_find_object(oid2)->up != oid) {		\
-			errlog(						\
-			    "VALIDATE: #%d erroneously on #%d's %s list.\n", \
-			    oid2, oid, down_name);			\
-			broken = 1;					\
-		    }							\
-		}							\
-	    }
-
-	    CHECK(parent, child, "child", sibling);
-	    CHECK(location, contents, "contents", next);
-
-#	    undef CHECK
-	}
-    }
 
     oklog("VALIDATING the object hierarchies ... finished.\n");
     return !broken;
@@ -386,6 +411,8 @@ read_db_file(void)
     int i, vnum, dummy;
     db_verb_handle h;
     Program *program;
+
+    waif_before_loading();
 
     if (dbio_scanf(header_format_string, &dbio_input_version) != 1)
 	dbio_input_version = DBV_Prehistory;
@@ -463,6 +490,8 @@ read_db_file(void)
 	errlog("DB_READ: Can't read active connections.\n");
 	return 0;
     }
+
+    waif_after_loading();
     return 1;
 }
 
@@ -479,6 +508,8 @@ write_db_file(const char *reason)
     int i;
     volatile int nprogs = 0;
     volatile int success = 1;
+
+    waif_before_saving();
 
     for (oid = 0; oid <= max_oid; oid++) {
 	if (valid(oid))
@@ -524,6 +555,8 @@ write_db_file(const char *reason)
     EXCEPT(dbpriv_dbio_failed)
 	success = 0;
     ENDTRY;
+
+    waif_after_saving();
 
     return success;
 }
@@ -656,6 +689,12 @@ db_initialize(int *pargc, char ***pargv)
     return 1;
 }
 
+void
+db_recoverymode(int is_on)
+{
+    recovery_mode = 1;
+}
+
 int
 db_load(void)
 {
@@ -718,10 +757,33 @@ db_shutdown()
     dump_database(DUMP_SHUTDOWN);
 }
 
-char rcsid_db_file[] = "$Id: db_file.c,v 1.4 1998/12/14 13:17:33 nop Exp $";
+char rcsid_db_file[] = "$Id: db_file.c,v 1.8 2009/03/08 12:41:31 blacklite Exp $";
 
 /* 
  * $Log: db_file.c,v $
+ * Revision 1.8  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.7  2008/08/24 07:57:05  blacklite
+ * massive speedup to rebuild, which in itself demonstrates how great it is 
+ * to have a lastcontents/lastchild pointer. rebuild phase 2 now takes <1 sec, 
+ * down from ~18 minutes. :o
+ *
+ * Revision 1.6  2008/08/24 05:06:13  blacklite
+ * Add -r option and more fixes to the recovery process.
+ *
+ * Revision 1.5  2008/08/23 21:30:31  blacklite
+ * Add emergency rebuild phase
+ *
+ * Revision 1.4  2008/08/22 22:09:20  blacklite
+ * Add lastchild and lastcontents to make linked lists both undumb and fast.
+ * (As opposed to my insert-at-the-front hack which was fast but dumb.)
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:17:33  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

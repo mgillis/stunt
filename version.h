@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+extern const char *FUP_version;
 extern const char *server_version;
 
 /* The following list must never be reordered, only appended to.  There is one
@@ -45,6 +46,7 @@ typedef enum {
 				 * change exists solely to turn off special
 				 * bug handling in read_bi_func_data().
 				 */
+    DBV_Hash,			/* Addition of `HASH' variables. */
     Num_DB_Versions		/* Special: the current version is this - 1. */
 } DB_Version;
 
@@ -59,6 +61,14 @@ extern int check_version(DB_Version);
 
 /* 
  * $Log: version.h,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:19:19  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

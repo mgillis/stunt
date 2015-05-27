@@ -16,18 +16,33 @@
  *****************************************************************************/
 
 #include "config.h"
+#include "storage.h"
 
-#if 0
-extern void addref(const void *p);
-extern unsigned int delref(const void *p);
+#if MEMORY_TRACE
+#define addref(X) (record_ref((void*)X,1) + ++((int *)(X))[-1])
+#define delref(X) (record_ref((void*)X,-1) + --((int *)(X))[-1])
+#define refcount(X) (record_ref((void*)X,0) + ((int *)(X))[-1])
+
 #else
 #define addref(X) (++((int *)(X))[-1])
 #define delref(X) (--((int *)(X))[-1])
 #define refcount(X) (((int *)(X))[-1])
+
 #endif
 
 /* 
  * $Log: ref_count.h,v $
+ * Revision 1.5  2009/08/14 16:48:13  blacklite
+ * add special handling for memory tracing when FAKE_FREE is on, basically emulate the sort of thing that valgrind et al do, don't free anything, and then abort if old, supposedly-freed memory gets used. also move checks to the front in ref_count.h macros so they happen -before- the actual pointer dereference, so we abort before a double free.
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:18:55  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

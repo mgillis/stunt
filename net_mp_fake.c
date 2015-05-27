@@ -136,10 +136,10 @@ mplex_wait(unsigned timeout)
 		}
 	    }
 	}
-
+	timeout -= 1000000;
 	if (got_one)
 	    break;
-	else if (timeout-- > 0)
+	else if (timeout > 0)
 	    sleep(1);
     }
 
@@ -158,9 +158,12 @@ mplex_is_writable(int fd)
     return (fd < rw_size) ? writable[fd] : 0;
 }
 
-char rcsid_net_mp_fake[] = "$Id: net_mp_fake.c,v 1.2 1997/03/03 04:19:03 nop Exp $";
+char rcsid_net_mp_fake[] = "$Id: net_mp_fake.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* $Log: net_mp_fake.c,v $
+/* Revision 1.3  2007/09/12 07:33:29  spunky
+/* This is a working version of the current HellMOO server
+/*
 /* Revision 1.2  1997/03/03 04:19:03  nop
 /* GNU Indent normalization
 /*

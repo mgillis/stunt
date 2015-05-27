@@ -19,6 +19,9 @@
  * Private interface for internal communication in the DB implementation
  *****************************************************************************/
 
+#ifndef DB_PRIVATE_h
+#define DB_PRIVATE_h
+
 #include "config.h"
 #include "exceptions.h"
 #include "program.h"
@@ -65,7 +68,8 @@ typedef struct Object {
     Objid parent;
     Objid child;
     Objid sibling;
-
+    Objid lastchild;
+    Objid lastcontents;
 
     const char *name;
     int flags;
@@ -73,6 +77,8 @@ typedef struct Object {
     Verbdef *verbdefs;
     Proplist propdefs;
     Pval *propval;
+
+    void *waif_propdefs;
 } Object;
 
 /*********** Verb cache support ***********/
@@ -160,8 +166,17 @@ extern Exception dbpriv_dbio_failed;
 extern void dbpriv_set_dbio_input(FILE *);
 extern void dbpriv_set_dbio_output(FILE *);
 
+#endif DB_PRIVATE_h
+
 /* 
  * $Log: db_private.h,v $
+ * Revision 1.4  2008/08/22 22:09:20  blacklite
+ * Add lastchild and lastcontents to make linked lists both undumb and fast.
+ * (As opposed to my insert-at-the-front hack which was fast but dumb.)
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:17:37  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

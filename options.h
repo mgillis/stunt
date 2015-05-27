@@ -80,11 +80,15 @@
 
 #define DEFAULT_MAX_STACK_DEPTH	50
 
-#define DEFAULT_FG_TICKS	30000
-#define DEFAULT_BG_TICKS	15000
+#define DEFAULT_FG_TICKS	100000
+#define DEFAULT_BG_TICKS	100000
 
 #define DEFAULT_FG_SECONDS	5
-#define DEFAULT_BG_SECONDS	3
+#define DEFAULT_BG_SECONDS	5
+
+#define YIELD_THRESHOLD_TICKS   1000
+#define YIELD_THRESHOLD_SECONDS 1
+#define YIELD_FOR_SECONDS       1
 
 /******************************************************************************
  * NETWORK_PROTOCOL must be defined as one of the following:
@@ -109,7 +113,7 @@
 
 #define NETWORK_PROTOCOL 	NP_TCP
 
-#define DEFAULT_PORT 		7777
+#define DEFAULT_PORT 		7999
 #define DEFAULT_CONNECT_FILE	"/tmp/.MOO-server"
 
 /******************************************************************************
@@ -155,7 +159,7 @@
  *	 NP_SINGLE or NP_LOCAL.
  */
 
-/* #define OUTBOUND_NETWORK */
+#define OUTBOUND_NETWORK
 
 /******************************************************************************
  * The following constants define certain aspects of the server's network
@@ -206,7 +210,7 @@
  * The code generator can now recognize situations where the code will not
  * refer to the value of a variable again and generate opcodes that will
  * keep the interpreter from holding references to the value in the runtime
- * environment variable slot.  Before when doing something like x=f(x), the
+ * environment variable slot.  Before, when doing something like x=f(x), the
  * interpreter was guaranteed to have a reference to the value of x while f()
  * was running, meaning that f() always had to copy x to modify it.  With
  * BYTECODE_REDUCE_REF enabled, f() could be called with the last reference
@@ -215,9 +219,42 @@
  * x rather than make a copy and append to that.  If it *does* have to copy,
  * the next time (if it's in a loop) it will have the only reference to the
  * copy and then it can take advantage.
- ****************************************************************************** 
- */
+ *
+ * NOTE WELL    NOTE WELL    NOTE WELL    NOTE WELL    NOTE WELL    
+ *
+ * This option affects the length of certain bytecode sequences.
+ * Suspended tasks in a database from a server built with this option
+ * are not guaranteed to work with a server built without this option,
+ * and vice versa.  It is safe to flip this switch only if there are
+ * no suspended tasks in the database you are loading.  (It might work
+ * anyway, but hey, it's your database.)  This restriction will be
+ * lifted in a future version of the server software.  Consider this
+ * option as being BETA QUALITY until then.
+ *
+ * NOTE WELL    NOTE WELL    NOTE WELL    NOTE WELL    NOTE WELL    
+ *
+ ****************************************************************************** */
 #define BYTECODE_REDUCE_REF
+
+/* #ifdef BYTECODE_REDUCE_REF
+ * #error Think carefully before enabling BYTECODE_REDUCE_REF.  This feature is still beta.  Comment out this line if you are sure.
+ * #endif
+ */
+
+
+/******************************************************************************
+ * List reallocations can take time. PADDED_LIST_ALLOC enables allocations of 
+ * more space than is actually needed for lists, so that appending to lists 
+ * requires far less shuffling of memory. This all happens transparently
+ * through myrealloc.
+ *
+ * IMPORTANT: I didn't actually profile any of this, so I could be totally 
+ * wrong about the whole speed gain thing. :D
+ *
+ * EVEN MORE IMPORTANT: This doesn't actually work yet.
+ ****************************************************************************** */
+/* #define PADDED_LIST_ALLOC */
+
 
 /******************************************************************************
  * This package comes with a copy of the implementation of malloc() from GNU
@@ -238,6 +275,40 @@
  */
 
 /* #define USE_GNU_MALLOC */
+
+
+/******************
+ * PROFILING      *
+ *  when any of the following defines are true, profile data is dumped to
+ *  a profile file given on the command line by the -p switch, or 
+ *  to stderr. NOTE: these profile logs are huge. PROFILE_VERBS gives
+ *  ~400 MB for 5 minutes of operation of our busy moo.
+ ******************/
+
+/* #define PROFILE_OPS    *  -- not yet implemented, for op execution times
+ * #define PROFILE_VERBS  *  -- show verb calls in profile log
+ * #define PROFILE_FUNCS  *  -- not yet implemented, for builtin func calls
+ */
+
+
+/***************
+ * EXPERIMENTAL STUFF
+ *
+ * Allow connections to non-player objects.
+ */
+
+#define NON_PLAYER_CONNECTIONS
+
+/**
+ * Transfer connections between objects. (causes segfaults...)
+ */
+/* #define CONNECTION_TRANSFERS */
+
+/**
+ * Compile in mysql support.
+ */
+/* #define MOOMYSQL */
+
 
 /*****************************************************************************
  ********** You shouldn't need to change anything below this point. **********
@@ -319,6 +390,39 @@
 
 /* 
  * $Log: options.h,v $
+ * Revision 1.9  2010/05/16 02:39:23  blacklite
+ * Break out some IPC stuff into pipe_utils.c, add var serialization, and some unfinished mysql stuff
+ *
+ * Revision 1.8  2009/07/26 21:57:42  blacklite
+ * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
+ * function and various supporting things. Which don't actually work without
+ * causing segfaults, but, hey, it's a start.
+ *
+ * Revision 1.7  2009/07/26 20:00:07  blacklite
+ * add NON_PLAYER_CONNECTIONS define
+ *
+ * Revision 1.6  2009/07/25 03:21:59  blacklite
+ * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
+ * (specify with -p). I may still be missing some spots but this seems to give
+ * usable info right now.
+ *
+ * Revision 1.5  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.4  2008/08/24 05:09:16  blacklite
+ * add PADDED_LIST_ALLOC, but disable it by default, because it doesn't quite work yet. also remove the 'itemsize' from memory_usage since it is actually useless.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
+ * Revision 1.7  2000/01/11 02:05:27  nop
+ * More doc tweaking, really warn about BYTECODE_REDUCE_REF.
+ *
+ * Revision 1.6  2000/01/09 22:20:15  nop
+ * Round one of doc cleanup.
+ *
  * Revision 1.5  1999/08/09 04:09:54  nop
  * Turn up the buffer sizes a notch.  They're still really too small...
  *

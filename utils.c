@@ -23,6 +23,7 @@
 #include "db.h"
 #include "db_io.h"
 #include "exceptions.h"
+#include "hash.h"
 #include "list.h"
 #include "log.h"
 #include "match.h"
@@ -32,6 +33,7 @@
 #include "storage.h"
 #include "streams.h"
 #include "structures.h"
+#include "waif.h"
 #include "utils.h"
 
 /*
@@ -142,11 +144,21 @@ void
 complex_free_var(Var v)
 {
     int i;
-
+ 
     switch ((int) v.type) {
     case TYPE_STR:
 	if (v.v.str)
 	    free_str(v.v.str);
+	break;
+    case TYPE_HASH:
+	/* hashes are lists, except the mem type */
+	if (delref(v.v.list) == 0) {
+	    Var *pv;
+
+	    for (i = v.v.list[0].v.num, pv = v.v.list + 1; i > 0; i--, pv++)
+		free_var(*pv);
+	    myfree(v.v.list, M_HASH);
+	}
 	break;
     case TYPE_LIST:
 	if (delref(v.v.list) == 0) {
@@ -161,6 +173,10 @@ complex_free_var(Var v)
 	if (delref(v.v.fnum) == 0)
 	    myfree(v.v.fnum, M_FLOAT);
 	break;
+    case TYPE_WAIF:
+	if (delref(v.v.waif) == 0)
+	    free_waif(v.v.waif);
+	break;
     }
 }
 
@@ -171,11 +187,15 @@ complex_var_ref(Var v)
     case TYPE_STR:
 	addref(v.v.str);
 	break;
+    case TYPE_HASH:
     case TYPE_LIST:
 	addref(v.v.list);
 	break;
     case TYPE_FLOAT:
 	addref(v.v.fnum);
+	break;
+    case TYPE_WAIF:
+	addref(v.v.waif);
 	break;
     }
     return v;
@@ -185,22 +205,32 @@ Var
 complex_var_dup(Var v)
 {
     int i;
-    Var newlist;
+    Var newv;
 
     switch ((int) v.type) {
     case TYPE_STR:
 	v.v.str = str_dup(v.v.str);
 	break;
-    case TYPE_LIST:
-	newlist = new_list(v.v.list[0].v.num);
+    case TYPE_HASH:
+	newv = alloc_list_for_hash(v.v.list[0].v.num);
 	for (i = 1; i <= v.v.list[0].v.num; i++) {
-	    newlist.v.list[i] = var_ref(v.v.list[i]);
+	    /* these are chain lists, ref won't do */
+	    newv.v.list[i] = var_dup(v.v.list[i]);
 	}
-	v.v.list = newlist.v.list;
+	v.v.list = newv.v.list;
+	break;
+    case TYPE_LIST:
+	newv = new_list(v.v.list[0].v.num);
+	for (i = 1; i <= v.v.list[0].v.num; i++) {
+	    newv.v.list[i] = var_ref(v.v.list[i]);
+	}
+	v.v.list = newv.v.list;
 	break;
     case TYPE_FLOAT:
 	v = new_float(*v.v.fnum);
 	break;
+    case TYPE_WAIF:
+	v.v.waif = dup_waif(v.v.waif);
     }
     return v;
 }
@@ -215,6 +245,7 @@ var_refcount(Var v)
     case TYPE_STR:
 	return refcount(v.v.str);
 	break;
+    case TYPE_HASH:
     case TYPE_LIST:
 	return refcount(v.v.list);
 	break;
@@ -231,7 +262,9 @@ is_true(Var v)
     return ((v.type == TYPE_INT && v.v.num != 0)
 	    || (v.type == TYPE_FLOAT && *v.v.fnum != 0.0)
 	    || (v.type == TYPE_STR && v.v.str && *v.v.str != '\0')
-	    || (v.type == TYPE_LIST && v.v.list[0].v.num != 0));
+	    || (v.type == TYPE_LIST && v.v.list[0].v.num != 0)
+	    || (v.type == TYPE_HASH && hashlength(v) != 0)
+	);
 }
 
 int
@@ -269,6 +302,11 @@ equality(Var lhs, Var rhs, int case_matters)
 		}
 		return 1;
 	    }
+	case TYPE_HASH:
+		return ((hashlength(lhs) == 0 && hashlength(rhs) == 0) 
+			|| lhs.v.list == rhs.v.list);
+	case TYPE_WAIF:
+		return lhs.v.waif == rhs.v.waif;
 	default:
 	    panic("EQUALITY: Unknown value type");
 	}
@@ -373,10 +411,14 @@ value_bytes(Var v)
 	size += sizeof(double);
 	break;
     case TYPE_LIST:
+    case TYPE_HASH:
 	len = v.v.list[0].v.num;
 	size += sizeof(Var);	/* for the `length' element */
 	for (i = 1; i <= len; i++)
 	    size += value_bytes(v.v.list[i]);
+	break;
+    case TYPE_WAIF:
+	size += waif_bytes(v.v.waif);
 	break;
     default:
 	break;
@@ -417,35 +459,87 @@ binary_to_raw_bytes(const char *binary, int *buflen)
     else
 	reset_stream(s);
 
+    unsigned char x;
+    unsigned char y;
+    unsigned char ux;
+    unsigned char uy;
+
     while (*ptr) {
-	unsigned char c = *ptr++;
+       unsigned char c = *ptr++;
+       if (c == '~')
+         {
+                 if ((x = *ptr++) == '~')
+                 {
+                     /* an escaped tilde */
+                     stream_add_char(s, c);
+                 }
+                 else  if ((y = *ptr++) == '~')
+                 {
+                     /* doh, we have to jump back, since we need to
+                        re-evaluate from the beginning on the new tilde */
+                     stream_add_char(s, c);
+                     stream_add_char(s, x);
+                     *ptr--;
+                 }
+                 else
+                 {
+                     uy = toupper(y);
+                     ux = toupper(x);
+                     if ((('0' <= ux && ux <= '9') || ('A' <= ux && ux <= 'F')) &&
+                         (('0' <= uy && uy <= '9') || ('A' <= uy && uy <= 'F')))
+                     {
+                         char cc = 16 * (ux <= '9' ? ux - '0' : (ux - 'A') + 10)+
+                                        (uy <= '9' ? uy - '0' : (uy - 'A') + 10);
+                         stream_add_char(s, cc);
+                     }
+                     else
+                     {
+                         stream_add_char(s, c);
+                         stream_add_char(s, x);
+                         stream_add_char(s, y);
+                     }
+                 }
+         }
+         else
+         {
+                 stream_add_char(s, c);
+         }
 
-	if (c != '~')
-	    stream_add_char(s, c);
-	else {
-	    int i;
-	    char cc = 0;
-
-	    for (i = 1; i <= 2; i++) {
-		c = toupper(*ptr++);
-		if (('0' <= c && c <= '9') || ('A' <= c && c <= 'F'))
-		    cc = cc * 16 + (c <= '9' ? c - '0' : c - 'A' + 10);
-		else
-		    return 0;
-	    }
-
-	    stream_add_char(s, cc);
-	}
     }
+
+    /* Add CR */
+    stream_add_string(s, "\r\n");
+
 
     *buflen = stream_length(s);
     return reset_stream(s);
 }
 
-char rcsid_utils[] = "$Id: utils.c,v 1.5 1999/08/09 02:36:33 nop Exp $";
+char rcsid_utils[] = "$Id: utils.c,v 1.10 2009/07/22 19:33:52 blacklite Exp $";
 
 /* 
  * $Log: utils.c,v $
+ * Revision 1.10  2009/07/22 19:33:52  blacklite
+ * Fixed truth value of null hash [], and made [] == [].
+ *
+ * Revision 1.9  2009/07/22 19:27:10  blacklite
+ * Fixed bug where a dup'd hash pointed to old hashes' keys/values.
+ *
+ * Revision 1.8  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.7  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
+ * Revision 1.2  2005/07/07 23:43:48  spunky
+ * Fixed a bug that was causing non-binary spec'd characters appearing after a
+ * tilde to always appear in upper-case.
+ *
+ * Revision 1.1.1.1  2005/04/11 03:50:09  spunky
+ * original sources + existing hacks
+ *
  * Revision 1.5  1999/08/09 02:36:33  nop
  * Shortcut various equality tests if we have pointer equality.
  *

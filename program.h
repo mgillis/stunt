@@ -52,7 +52,8 @@ typedef struct {
     unsigned cached_lineno_vec;
 } Program;
 
-#define MAIN_VECTOR 	-1	/* As opposed to an index into fork_vectors */
+#define MAIN_VECTOR      -1	/* As opposed to an index into fork_vectors */
+#define UNDEFINED_VECTOR -2
 
 extern Program *new_program(void);
 extern Program *null_program(void);
@@ -64,6 +65,12 @@ extern void free_program(Program *);
 
 /* 
  * $Log: program.h,v $
+ * Revision 1.4  2009/10/11 00:24:18  blacklite
+ * initialize cached_lineno_vec
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1999/08/16 04:15:13  bjj
  * Lineno computation could be wrong for forked vectors.
  *

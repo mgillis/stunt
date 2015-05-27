@@ -33,6 +33,7 @@ new_program(void)
     p->first_lineno = 1;
     p->cached_lineno = 1;
     p->cached_lineno_pc = 0;
+    p->cached_lineno_vec = UNDEFINED_VECTOR;
     return p;
 }
 
@@ -112,10 +113,16 @@ free_program(Program * p)
     }
 }
 
-char rcsid_program[] = "$Id: program.c,v 1.5 1998/12/14 13:18:48 nop Exp $";
+char rcsid_program[] = "$Id: program.c,v 1.4 2009/10/11 00:24:18 blacklite Exp $";
 
 /* 
  * $Log: program.c,v $
+ * Revision 1.4  2009/10/11 00:24:18  blacklite
+ * initialize cached_lineno_vec
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:18:48  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

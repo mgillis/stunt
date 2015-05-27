@@ -37,19 +37,15 @@ extern int tasks_set_connection_option(task_queue, const char *,
 
 extern void new_input_task(task_queue, const char *);
 extern enum error enqueue_forked_task2(activation a, int f_index,
-			       unsigned after_seconds, int vid);
+			       double after_seconds, int vid);
+
 extern enum error enqueue_suspended_task(vm the_vm, void *data);
-				/* data == &(int after_seconds) */
+extern enum error enqueue_yielded_task(vm the_vm, void *data);
+			/* for both: data == &(int after_seconds) */
+
 extern enum error make_reading_task(vm the_vm, void *data);
 				/* data == &(Objid connection) */
-extern void resume_task(vm the_vm, Var value);
-				/* Make THE_VM (a suspended task) runnable on
-				 * the appropriate task queue; when it resumes
-				 * execution, return VALUE from the built-in
-				 * function that suspended it.  If VALUE.type
-				 * is TYPE_ERR, then VALUE is raised instead of
-				 * returned.
-				 */
+
 extern vm find_suspended_task(int id);
 
 /* External task queues:
@@ -97,6 +93,7 @@ extern enum outcome run_server_program_task(Objid this, const char *verb,
 
 extern int current_task_id;
 extern int last_input_task_id(Objid player);
+extern Var list_for_last_suspended_task();
 
 extern void write_task_queue(void);
 extern int read_task_queue(void);
@@ -110,6 +107,15 @@ extern db_verb_handle find_verb_for_programming(Objid player,
 
 /* 
  * $Log: tasks.h,v $
+ * Revision 1.5  2009/08/14 21:35:38  blacklite
+ * call #0:task_suspended whenever it happens.
+ *
+ * Revision 1.4  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:19:08  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

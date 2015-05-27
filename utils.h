@@ -19,7 +19,9 @@
 #define Utils_h 1
 
 #include "my-stdio.h"
+#include "my-stdlib.h"
 
+#include "log.h"
 #include "config.h"
 #include "execute.h"
 
@@ -43,8 +45,34 @@ extern Var complex_var_dup(Var);
 extern int var_refcount(Var);
 
 static inline void
+check_var_sanity(Var v)
+{
+    switch (v.type) {
+	case TYPE_INT:
+	case TYPE_OBJ:
+	case TYPE_ERR:
+	case TYPE_CLEAR:
+	case TYPE_NONE:
+	case TYPE_CATCH:
+	case TYPE_FINALLY:
+	case TYPE_STR:
+	case TYPE_FLOAT:
+	case TYPE_LIST:
+	case TYPE_HASH:
+	case TYPE_WAIF:
+	case TYPE_ANY:
+	case TYPE_NUMERIC:
+	    break; /* ok */
+	default:
+	    errlog("var with unknown type, aborting now");
+	    abort();
+    }
+}
+
+static inline void
 free_var(Var v)
 {
+    check_var_sanity(v);
     if (v.type & TYPE_COMPLEX_FLAG)
 	complex_free_var(v);
 }
@@ -52,6 +80,7 @@ free_var(Var v)
 static inline Var
 var_ref(Var v)
 {
+    check_var_sanity(v);
     if (v.type & TYPE_COMPLEX_FLAG)
 	return complex_var_ref(v);
     else
@@ -61,6 +90,7 @@ var_ref(Var v)
 static inline Var
 var_dup(Var v)
 {
+    check_var_sanity(v);
     if (v.type & TYPE_COMPLEX_FLAG)
 	return complex_var_dup(v);
     else
@@ -86,6 +116,12 @@ extern const char *binary_to_raw_bytes(const char *binary, int *rawlen);
 
 /* 
  * $Log: utils.h,v $
+ * Revision 1.4  2009/10/11 00:27:15  blacklite
+ * check var sanity  -- quick checks that hopefully cut off corruption before we end up dumping db with fucked types
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.6  1998/12/14 13:19:15  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

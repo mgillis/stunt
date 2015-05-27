@@ -20,9 +20,11 @@
 
 #include "bf_register.h"
 #include "config.h"
+#include "execute.h"
 #include "exceptions.h"
 #include "functions.h"
 #include "list.h"
+#include "hash.h"
 #include "log.h"
 #include "md5.h"
 #include "options.h"
@@ -34,6 +36,9 @@
 #include "structures.h"
 #include "unparse.h"
 #include "utils.h"
+#include "hash_lookup.h"
+
+#define TRY_REALLOC_TRICKS 1
 
 Var
 new_list(int size)
@@ -110,20 +115,52 @@ doinsert(Var list, Var value, int pos)
     int i;
     int size = list.v.list[0].v.num + 1;
 
-    if (var_refcount(list) == 1 && pos == size) {
-	list.v.list = (Var *) myrealloc(list.v.list, (size + 1) * sizeof(Var), M_LIST);
-	list.v.list[0].v.num = size;
-	list.v.list[pos] = value;
-	return list;
+    if (var_refcount(list) == 1) {
+	/* no one's storing refs except us, so we can do realloc tricks. */
+
+	if (pos == size) {
+	    list.v.list = (Var *) myrealloc(list.v.list, (size + 1) * sizeof(Var), M_LIST);
+    	    list.v.list[0].v.num = size;
+	    list.v.list[pos] = value;
+	    return list;
+	}
+	else {
+#ifdef TRY_REALLOC_TRICKS
+	    /* resize to $+1 */
+	    list.v.list = (Var *) myrealloc(list.v.list, (size + 1) * sizeof(Var), M_LIST);
+	
+	    /* shift elements from list[pos..$] to list[pos + 1..$+1] */
+	    memmove(list.v.list + pos + 1, list.v.list + pos, (size - pos + 1) * sizeof(Var));
+#else
+	    /* insert into refcount 1 list. */
+	    Var *newlist;
+	    
+	    newlist = (Var *) mymalloc((size + 1) * sizeof(Var), M_LIST);
+
+	    /* copy from oldlist to newlist up to 'pos' */
+	    memcpy(newlist, list.v.list, pos * sizeof(Var));
+ 
+	    /* copy from oldlist[pos] to newlist[pos+1], the rest of the list. */
+	    memcpy(newlist + pos + 1, list.v.list + pos, (size - 1 - pos) * sizeof(Var));
+
+	    /* finally, set up new value. */
+	    list.v.list = newlist;
+#endif
+	    list.v.list[0].v.num = size;
+	    list.v.list[pos] = value;
+	    return list;
+	}
     }
-    new = new_list(size);
-    for (i = 1; i < pos; i++)
-	new.v.list[i] = var_ref(list.v.list[i]);
-    new.v.list[pos] = value;
-    for (i = pos; i <= list.v.list[0].v.num; i++)
-	new.v.list[i + 1] = var_ref(list.v.list[i]);
-    free_var(list);
-    return new;
+    else {
+	new = new_list(size);
+	for (i = 1; i < pos; i++)
+	    new.v.list[i] = var_ref(list.v.list[i]);
+	new.v.list[pos] = value;
+	for (i = pos; i <= list.v.list[0].v.num; i++)
+	    new.v.list[i + 1] = var_ref(list.v.list[i]);
+	free_var(list);
+	return new;
+    }
 }
 
 Var
@@ -249,6 +286,12 @@ list2str(Var * args)
 	case TYPE_LIST:
 	    stream_add_string(str, "{list}");
 	    break;
+	case TYPE_HASH:
+	    stream_add_string(str, "[hash]");
+	    break;
+	case TYPE_WAIF:
+	    stream_add_string(str, "{waif}");
+	    break;
 	default:
 	    panic("LIST2STR: Impossible var type.\n");
 	}
@@ -317,6 +360,35 @@ print_to_stream(Var v, Stream * s)
 		print_to_stream(v.v.list[i], s);
 	    }
 	    stream_add_char(s, '}');
+	}
+	break;
+    case TYPE_WAIF:
+	stream_printf(s, "[[class = #%d, owner = #%d]]",
+		v.v.waif->class, v.v.waif->owner);
+	break;
+    case TYPE_HASH:
+	{
+	    const char *sep = "";
+	    int len, i, sublen, subi;
+	    Var hashentry;
+
+	    stream_add_char(s, '[');
+	    len = v.v.list[0].v.num;
+	    for (i = HASH_START; i <= len; i++) {
+		hashentry = v.v.list[i];
+		
+		if (hashentry.type == TYPE_LIST) {
+		    sublen = hashentry.v.list[0].v.num;
+		    for (subi = 1; subi <= sublen; subi += 2) {
+			stream_add_string(s, sep);
+			sep = ", ";
+			print_to_stream(hashentry.v.list[subi], s);
+			stream_add_string(s, " -> ");
+			print_to_stream(hashentry.v.list[subi+1], s);
+		    }
+		}
+	    }
+	    stream_add_char(s, ']');
 	}
 	break;
     default:
@@ -413,6 +485,10 @@ bf_length(Var arglist, Byte next, void *vdata, Objid progr)
     case TYPE_LIST:
 	r.type = TYPE_INT;
 	r.v.num = arglist.v.list[1].v.list[0].v.num;
+	break;
+    case TYPE_HASH:
+	r.type = TYPE_INT;
+	r.v.num = hashlength(arglist.v.list[1]);
 	break;
     case TYPE_STR:
 	r.type = TYPE_INT;
@@ -918,24 +994,16 @@ bf_value_bytes(Var arglist, Byte next, void *vdata, Objid progr)
     return make_var_pack(r);
 }
 
-static const char *
+static inline int
 hash_bytes(const char *input, int length)
 {
-    md5ctx_t context;
-    uint8 result[16];
-    int i;
-    const char digits[] = "0123456789ABCDEF";
-    char *hex = str_dup("12345678901234567890123456789012");
-    const char *answer = hex;
+   uint32_t hash;
 
-    md5_Init(&context);
-    md5_Update(&context, (uint8 *) input, length);
-    md5_Final(&context, result);
-    for (i = 0; i < 16; i++) {
-	*hex++ = digits[result[i] >> 4];
-	*hex++ = digits[result[i] & 0xF];
-    }
-    return answer;
+   /* 33 is a random number that's there for fun */
+   hash = hashlittle(input, length, 33);
+
+   /* ok now we don't want it unsigned, so */
+   return (int) hash;
 }
 
 static package
@@ -948,8 +1016,8 @@ bf_binary_hash(Var arglist, Byte next, void *vdata, Objid progr)
     free_var(arglist);
     if (!bytes)
 	return make_error_pack(E_INVARG);
-    r.type = TYPE_STR;
-    r.v.str = hash_bytes(bytes, length);
+    r.type = TYPE_INT;
+    r.v.num = hash_bytes(bytes, length);
     return make_var_pack(r);
 }
 
@@ -959,8 +1027,8 @@ bf_string_hash(Var arglist, Byte next, void *vdata, Objid progr)
     Var r;
     const char *str = arglist.v.list[1].v.str;
 
-    r.type = TYPE_STR;
-    r.v.str = hash_bytes(str, strlen(str));
+    r.type = TYPE_INT;
+    r.v.num = hash_bytes(str, strlen(str));
     free_var(arglist);
     return make_var_pack(r);
 }
@@ -971,8 +1039,8 @@ bf_value_hash(Var arglist, Byte next, void *vdata, Objid progr)
     Var r;
     const char *lit = value_to_literal(arglist.v.list[1]);
 
-    r.type = TYPE_STR;
-    r.v.str = hash_bytes(lit, strlen(lit));
+    r.type = TYPE_INT;
+    r.v.num = hash_bytes(lit, strlen(lit));
     free_var(arglist);
     return make_var_pack(r);
 }
@@ -1095,6 +1163,104 @@ bf_encode_binary(Var arglist, Byte next, void *vdata, Objid progr)
 	return make_error_pack(E_INVARG);
 }
 
+struct bf_map_data {
+    Objid oid;
+    const char* verb;
+    Var args, result;
+    int index, until;
+};
+
+static package
+do_map(Var arglist, Byte next, struct bf_map_data *data, Objid progr)
+{
+    if (next != 1) {
+	/* got results */
+	data->result.v.list[next - 1] = arglist;	
+    }
+
+    if (next <= data->until) {
+	/* not the last */
+	enum error e = call_verb(data->oid, data->verb, data->args, 0);
+
+	if (e != E_NONE) {
+	    free_var(arglist);
+	    return make_error_pack(e);
+	}
+        return make_call_pack(next++, data);
+    } else {
+	/* we're all done */
+	Var result = data->result;
+	return make_var_pack(result);
+    }
+}
+
+static package
+bf_map(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    int i;
+    package p;
+    Var rest;
+    struct bf_map_data *data = vdata;
+
+    if (next == 1) {
+	data = alloc_data(sizeof(*data));
+
+    	if (arglist.v.list[1].type == TYPE_INT) {
+	    data->index = arglist.v.list[1].v.num;
+
+	    if (arglist.v.list[2].type != TYPE_OBJ
+		|| arglist.v.list[3].type != TYPE_STR) {
+		free_var(arglist);
+		free_data(data);
+		return make_error_pack(E_TYPE);
+	    }
+
+	    data->oid   = arglist.v.list[2].v.obj;
+	    data->verb  = arglist.v.list[3].v.str;
+	    rest  = sublist(arglist, 4, arglist.v.list[0].v.num);
+
+	} else {
+	    if (arglist.v.list[1].type != TYPE_OBJ
+		|| arglist.v.list[2].type != TYPE_STR) {
+		free_var(arglist);
+		free_data(data);
+		return make_error_pack(E_TYPE);
+	    }
+
+	    data->index = 1;
+	    data->oid   = arglist.v.list[1].v.obj;
+	    data->verb  = arglist.v.list[2].v.str;
+	    rest  = sublist(arglist, 3, arglist.v.list[0].v.num);
+	}
+
+	if (rest.v.list[data->index].type != TYPE_LIST) {
+       	    free_var(rest);
+       	    free_data(data);
+       	    return make_error_pack(E_INVARG);
+	}
+
+        data->args = new_list(rest.v.list[0].v.num);
+	for (i = 1; i <= rest.v.list[0].v.num; i++) {
+	    if (i != data->index)
+		data->args.v.list[i] = var_ref(rest.v.list[i]);
+	}
+
+	data->result = new_list(rest.v.list[0].v.num);
+	data->until  = rest.v.list[0].v.num;
+    }
+
+    p = do_map(arglist, next, data, progr);
+
+    free_var(arglist);
+    if (p.kind != BI_CALL) {
+	free_var(data->args);
+	free_var(data->result);
+	free_data(data);
+    }
+
+    return p;
+}
+
 void
 register_list(void)
 {
@@ -1135,10 +1301,24 @@ register_list(void)
 }
 
 
-char rcsid_list[] = "$Id: list.c,v 1.5 1998/12/14 13:17:57 nop Exp $";
+char rcsid_list[] = "$Id: list.c,v 1.6 2009/09/29 20:47:52 blacklite Exp $";
 
 /* 
  * $Log: list.c,v $
+ * Revision 1.6  2009/09/29 20:47:52  blacklite
+ * Add infrastructure for bf_map (not used yet anywhere). Adjust formatting of some stuff in list_resize (tabs/spaces)
+ *
+ * Revision 1.5  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.4  2008/08/24 05:08:19  blacklite
+ * use memcpy for list inserts (as suggested by README.rX)
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:17:57  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

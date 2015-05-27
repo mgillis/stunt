@@ -152,16 +152,29 @@ extern enum Fork_Result fork_server(const char *subtask_name);
 
 extern void player_connected(Objid old_id, Objid new_id,
 			     int is_newly_created);
+#ifdef CONNECTION_TRANSFERS
+extern void server_connection_transferred(Objid old_id, Objid new_id);
+#endif
 extern void notify(Objid player, const char *message);
 extern void boot_player(Objid player);
 
 extern void write_active_connections(void);
 extern int read_active_connections(void);
 
+FILE  *Dev_Random;  /* Global file pointer for /dev/random */
+
 #endif				/* Server_H */
 
 /* 
  * $Log: server.h,v $
+ * Revision 1.5  2009/07/26 21:57:42  blacklite
+ * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
+ * function and various supporting things. Which don't actually work without
+ * causing segfaults, but, hey, it's a start.
+ *
+ * Revision 1.4  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:18:58  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

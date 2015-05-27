@@ -80,7 +80,7 @@ mplex_add_writer(int fd)
 int
 mplex_wait(unsigned timeout)
 {
-    int result = poll(ports, max_fd + 1, timeout * 1000);
+    int result = poll(ports, max_fd + 1, timeout / 1000);
 
     if (result < 0) {
 	if (errno != EINTR)
@@ -102,9 +102,12 @@ mplex_is_writable(int fd)
     return fd <= max_fd && (ports[fd].revents & POLLOUT) != 0;
 }
 
-char rcsid_net_mp_poll[] = "$Id: net_mp_poll.c,v 1.2 1997/03/03 04:19:04 nop Exp $";
+char rcsid_net_mp_poll[] = "$Id: net_mp_poll.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* $Log: net_mp_poll.c,v $
+/* Revision 1.3  2007/09/12 07:33:29  spunky
+/* This is a working version of the current HellMOO server
+/*
 /* Revision 1.2  1997/03/03 04:19:04  nop
 /* GNU Indent normalization
 /*

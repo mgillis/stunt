@@ -20,7 +20,8 @@
 #include "config.h"
 #include "structures.h"
 
-extern void set_log_file(FILE *);
+extern void  set_log_file(FILE *);
+extern FILE* get_log_file(void);
 
 extern void oklog(const char *,...);
 extern void errlog(const char *,...);
@@ -32,6 +33,14 @@ extern void add_command_to_history(Objid player, const char *command);
 
 /* 
  * $Log: log.h,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:18:00  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

@@ -116,6 +116,7 @@ become_integer(Var in, int *ret, int called_from_tonum)
 	*ret = (int) *in.v.fnum;
 	break;
     case TYPE_LIST:
+    case TYPE_HASH:
 	return E_TYPE;
     default:
 	errlog("BECOME_INTEGER: Impossible var type: %d\n", (int) in.type);
@@ -144,6 +145,7 @@ become_float(Var in, double *ret)
 	*ret = *in.v.fnum;
 	break;
     case TYPE_LIST:
+    case TYPE_HASH:
 	return E_TYPE;
     default:
 	errlog("BECOME_FLOAT: Impossible var type: %d\n", (int) in.type);
@@ -499,6 +501,36 @@ bf_abs(Var arglist, Byte next, void *vdata, Objid progr)
     return make_var_pack(r);
 }
 
+static package
+bf_mod(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    Var r, d;
+
+    r = var_dup(arglist.v.list[1]);
+    d = var_dup(arglist.v.list[2]);
+
+    if (d.v.num == 0) {
+        free_var(arglist);
+        return make_error_pack(E_DIV);
+    }
+
+    if (r.type == TYPE_INT && d.type == TYPE_FLOAT) {
+        r = new_float( (double) r.v.num );
+    }
+    if (r.type == TYPE_FLOAT && d.type == TYPE_INT) {
+	d = new_float( (double) d.v.num );
+    }
+
+    if (r.type == TYPE_INT && d.type == TYPE_INT) {
+	r.v.num = (r.v.num % d.v.num + d.v.num) % d.v.num;
+    } else if (r.type == TYPE_FLOAT && d.type == TYPE_FLOAT) {
+	*r.v.fnum = fmod(fmod(*r.v.fnum, *d.v.fnum) + *d.v.fnum, *d.v.fnum);
+	free_var(d);
+    }
+    free_var(arglist);
+    return make_var_pack(r);
+}
+
 #define MATH_FUNC(name)							      \
 		static package						      \
 		bf_ ## name(Var arglist, Byte next, void *vdata, Objid progr) \
@@ -646,6 +678,22 @@ bf_random(Var arglist, Byte next, void *vdata, Objid progr)
     }
 }
 
+int mels_random()
+{
+   extern FILE *Dev_Random;
+   int result;
+   char buf[5]; 
+   /* read 4 bytes from /dev/urandom */
+   fgets(buf, 5, Dev_Random);
+   /*fread(&result, 1, 4, Dev_Random);*/
+   /*memcpy(&result, buf, 4);*/
+   result += ((unsigned int)buf[0]) << 24;
+   result += ((unsigned int)buf[1]) << 16;
+   result += ((unsigned int)buf[2]) << 8;
+   result += (unsigned int)buf[3];
+   return result;
+}
+
 static package
 bf_floatstr(Var arglist, Byte next, void *vdata, Objid progr)
 {				/* (float, precision [, sci-notation]) */
@@ -683,6 +731,7 @@ register_numbers(void)
     register_function("min", 1, -1, bf_min, TYPE_NUMERIC);
     register_function("max", 1, -1, bf_max, TYPE_NUMERIC);
     register_function("abs", 1, 1, bf_abs, TYPE_NUMERIC);
+    register_function("mod", 2, 2, bf_mod, TYPE_NUMERIC, TYPE_NUMERIC);
     register_function("random", 0, 1, bf_random, TYPE_INT);
     register_function("time", 0, 0, bf_time);
     register_function("ctime", 0, 1, bf_ctime, TYPE_INT);
@@ -707,10 +756,24 @@ register_numbers(void)
     register_function("trunc", 1, 1, bf_trunc, TYPE_FLOAT);
 }
 
-char rcsid_numbers[] = "$Id: numbers.c,v 1.4 1998/12/14 13:18:37 nop Exp $";
+char rcsid_numbers[] = "$Id: numbers.c,v 1.7 2009/10/11 00:28:26 blacklite Exp $";
 
 /* 
  * $Log: numbers.c,v $
+ * Revision 1.7  2009/10/11 00:28:26  blacklite
+ * fix type checks for bf_mod
+ *
+ * Revision 1.6  2009/07/25 03:10:11  blacklite
+ * add bf_mod for correct modulo of floats and ints.
+ *
+ * Revision 1.5  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.4  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:18:37  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

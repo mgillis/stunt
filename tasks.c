@@ -43,19 +43,25 @@
 #include "verbs.h"
 #include "version.h"
 
+#include <sys/time.h>
+#include <math.h>
+
+#define ROUND(tvp)	((tvp)->tv_sec + ((tvp)->tv_usec > 500000))
+
 typedef struct forked_task {
     int id;
     Program *program;
     activation a;
     Var *rt_env;
     int f_index;
-    time_t start_time;
+	struct timeval start_tv;
 } forked_task;
 
 typedef struct suspended_task {
     vm the_vm;
-    time_t start_time;
+	struct timeval start_tv;
     Var value;
+    int ignore_value;
 } suspended_task;
 
 typedef struct {
@@ -133,11 +139,24 @@ int current_task_id;
 static tqueue *idle_tqueues = 0, *active_tqueues = 0;
 static task *waiting_tasks = 0;	/* forked and suspended tasks */
 static ext_queue *external_queues = 0;
+static task *last_suspended_task = 0;
 
 #define GET_START_TIME(ttt) \
     (ttt->kind == TASK_FORKED \
-     ? ttt->t.forked.start_time \
-     : ttt->t.suspended.start_time)
+	? &ttt->t.forked.start_tv \
+	: &ttt->t.suspended.start_tv)
+
+static inline struct timeval
+double_to_start_tv(double after_seconds)
+{
+	struct timeval now, delta, when;
+
+	gettimeofday(&now, NULL);
+	delta.tv_sec = floor(after_seconds);
+	delta.tv_usec = 1000000. * (after_seconds - delta.tv_sec);
+	timeradd(&now, &delta, &when);
+	return when;
+}
 
 
 static void
@@ -324,6 +343,7 @@ free_task(task * t, int strong)
 			t->t.forked.program->num_var_names);
 	    free_str(t->t.forked.a.verb);
 	    free_str(t->t.forked.a.verbname);
+	    free_var(t->t.forked.a.THIS);
 	}
 	free_program(t->t.forked.program);
 	break;
@@ -550,7 +570,11 @@ do_login_task(tqueue * tq, char *command)
     run_server_task_setting_id(tq->player, tq->handler, "do_login_command",
 			       args, command, &result,
 			       &(tq->last_input_task_id));
-    if (tq->connected && result.type == TYPE_OBJ && is_user(result.v.obj)) {
+    if (tq->connected && result.type == TYPE_OBJ 
+#ifndef NON_PLAYER_CONNECTIONS
+	    && is_user(result.v.obj)
+#endif
+    ){
 	Objid new_player = result.v.obj;
 	Objid old_player = tq->player;
 	tqueue *dead_tq = find_tqueue(new_player, 0);
@@ -763,21 +787,21 @@ static void
 enqueue_waiting(task * t)
 {				/* either FORKED or SUSPENDED */
 
-    time_t start_time = GET_START_TIME(t);
+    struct timeval *start_tvp = GET_START_TIME(t);
     Objid progr = (t->kind == TASK_FORKED
 		   ? t->t.forked.a.progr
 		   : progr_of_cur_verb(t->t.suspended.the_vm));
     tqueue *tq = find_tqueue(progr, 1);
 
     tq->num_bg_tasks++;
-    if (!waiting_tasks || start_time < GET_START_TIME(waiting_tasks)) {
+    if (!waiting_tasks || timercmp(start_tvp, GET_START_TIME(waiting_tasks), <)) {
 	t->next = waiting_tasks;
 	waiting_tasks = t;
     } else {
 	task *tt;
 
 	for (tt = waiting_tasks; tt->next; tt = tt->next)
-	    if (start_time < GET_START_TIME(tt->next))
+	    if (timercmp(start_tvp, GET_START_TIME(tt->next), <))
 		break;
 	t->next = tt->next;
 	tt->next = t;
@@ -786,7 +810,7 @@ enqueue_waiting(task * t)
 
 static void
 enqueue_ft(Program * program, activation a, Var * rt_env,
-	   int f_index, time_t start_time, int id)
+	   int f_index, struct timeval start_tv, int id)
 {
     task *t = (task *) mymalloc(sizeof(task), M_TASK);
 
@@ -795,7 +819,7 @@ enqueue_ft(Program * program, activation a, Var * rt_env,
     t->t.forked.a = a;
     t->t.forked.rt_env = rt_env;
     t->t.forked.f_index = f_index;
-    t->t.forked.start_time = start_time;
+    t->t.forked.start_tv = start_tv;
     t->t.forked.id = id;
 
     enqueue_waiting(t);
@@ -825,8 +849,9 @@ check_user_task_limit(Objid user)
 }
 
 enum error
-enqueue_forked_task2(activation a, int f_index, unsigned after_seconds, int vid)
+enqueue_forked_task2(activation a, int f_index, double after_seconds, int vid)
 {
+	struct timeval when;
     int id;
     Var *rt_env;
 
@@ -837,57 +862,59 @@ enqueue_forked_task2(activation a, int f_index, unsigned after_seconds, int vid)
     a.verb = str_ref(a.verb);
     a.verbname = str_ref(a.verbname);
     a.prog = program_ref(a.prog);
+    a.THIS = var_ref(a.THIS); //Fuck, I hope this is suppose to go here. -Broseidon 7/31/2014 WaifPatch
     if (vid >= 0) {
 	free_var(a.rt_env[vid]);
 	a.rt_env[vid].type = TYPE_INT;
 	a.rt_env[vid].v.num = id;
     }
     rt_env = copy_rt_env(a.rt_env, a.prog->num_var_names);
-    enqueue_ft(a.prog, a, rt_env, f_index, time(0) + after_seconds, id);
+	when = double_to_start_tv(after_seconds);
+    enqueue_ft(a.prog, a, rt_env, f_index, when, id);
 
     return E_NONE;
 }
 
-enum error
-enqueue_suspended_task(vm the_vm, void *data)
+static enum error
+enqueue_yield_or_suspend(vm the_vm, void *data, int ignore_value)
 {
-    int after_seconds = *((int *) data);
-    int now = time(0);
-    int when;
+	struct timeval when;
     task *t;
+
+	if(data) {
+		double after_seconds = *((double *) data);
+
+		when = double_to_start_tv(after_seconds);
+	} else {
+		when.tv_sec = INT32_MAX;
+		when.tv_usec = 0;
+}
 
     if (check_user_task_limit(progr_of_cur_verb(the_vm))) {
 	t = mymalloc(sizeof(task), M_TASK);
 	t->kind = TASK_SUSPENDED;
 	t->t.suspended.the_vm = the_vm;
-	if (now + after_seconds < now)
-	    /* overflow or suspend `forever' code */
-	    when = INT32_MAX;
-	else
-	    when = now + after_seconds;
-	t->t.suspended.start_time = when;
+	t->t.suspended.start_tv = when;
 	t->t.suspended.value = zero;
+	t->t.suspended.ignore_value = ignore_value;
 
 	enqueue_waiting(t);
+	last_suspended_task = t;
 	return E_NONE;
     } else
 	return E_QUOTA;
 }
 
-void
-resume_task(vm the_vm, Var value)
+enum error
+enqueue_suspended_task(vm the_vm, void *data)
 {
-    task *t = mymalloc(sizeof(task), M_TASK);
-    Objid progr = progr_of_cur_verb(the_vm);
-    tqueue *tq = find_tqueue(progr, 1);
+    return enqueue_yield_or_suspend(the_vm, data, 0);
+}
 
-    t->kind = TASK_SUSPENDED;
-    t->t.suspended.the_vm = the_vm;
-    t->t.suspended.start_time = 0;	/* ready now */
-    t->t.suspended.value = value;
-
-    enqueue_bg_task(tq, t);
-    ensure_usage(tq);
+enum error
+enqueue_yielded_task(vm the_vm, void *data)
+{
+    return enqueue_yield_or_suspend(the_vm, data, 1);
 }
 
 Var
@@ -947,10 +974,16 @@ next_task_start(void)
 	    return 0;
 
     if (waiting_tasks != 0) {
-	int wait = (waiting_tasks->kind == TASK_FORKED
-		    ? waiting_tasks->t.forked.start_time
-		    : waiting_tasks->t.suspended.start_time) - time(0);
-	return (wait >= 0) ? wait : 0;
+	struct timeval *tvp, now, delta;
+
+	gettimeofday(&now, NULL);
+	tvp = GET_START_TIME(waiting_tasks);
+	timersub(tvp, &now, &delta);
+	if(delta.tv_sec < 0 || delta.tv_usec < 0)
+		return 0;
+	if(delta.tv_sec > 9)
+		delta.tv_sec = 9;
+	return delta.tv_usec + delta.tv_sec * 1000000;
     }
     return -1;
 }
@@ -959,10 +992,10 @@ void
 run_ready_tasks(void)
 {
     task *t, *next_t;
-    time_t now = time(0);
+    struct timeval now;
     tqueue *tq, *next_tq;
-
-    for (t = waiting_tasks; t && GET_START_TIME(t) <= now; t = next_t) {
+	gettimeofday(&now, NULL);
+    for (t = waiting_tasks; t && timercmp(GET_START_TIME(t), &now, <=); t = next_t) {
 	Objid progr = (t->kind == TASK_FORKED
 		       ? t->t.forked.a.progr
 		       : progr_of_cur_verb(t->t.suspended.the_vm));
@@ -990,7 +1023,7 @@ run_ready_tasks(void)
 		current_task_id = tq->reading_vm->task_id;
 		v.type = TYPE_ERR;
 		v.v.err = E_INVARG;
-		resume_from_previous_vm(tq->reading_vm, v, TASK_INPUT, 0);
+		resume_from_previous_vm(tq->reading_vm, v, TASK_INPUT, 0, 0);
 		did_one = 1;
 	    }
 	    while (!did_one) {	/* Loop over tasks, looking for runnable one */
@@ -1016,7 +1049,7 @@ run_ready_tasks(void)
 			v.type = TYPE_STR;
 			v.v.str = t->t.input.string;
 			resume_from_previous_vm(tq->reading_vm, v, TASK_INPUT,
-						0);
+						0, 0);
 			did_one = 1;
 		    } else {
 			/* Used to insist on tq->connected here, but Pavel
@@ -1044,7 +1077,8 @@ run_ready_tasks(void)
 		    current_task_id = t->t.suspended.the_vm->task_id;
 		    resume_from_previous_vm(t->t.suspended.the_vm,
 					    t->t.suspended.value,
-					    TASK_SUSPENDED, 0);
+					    TASK_SUSPENDED, 0,
+					    t->t.suspended.ignore_value);
 		    did_one = 1;
 		    break;
 		}
@@ -1134,7 +1168,7 @@ write_forked_task(forked_task ft)
 {
     int lineno = find_line_number(ft.program, ft.f_index, 0);
 
-    dbio_printf("0 %d %d %d\n", lineno, ft.start_time, ft.id);
+    dbio_printf("0 %d %d %d\n", lineno, ROUND(&ft.start_tv), ft.id);
     write_activ_as_pi(ft.a);
     write_rt_env(ft.program->var_names, ft.rt_env, ft.program->num_var_names);
     dbio_write_forked_program(ft.program, ft.f_index);
@@ -1143,7 +1177,7 @@ write_forked_task(forked_task ft)
 static void
 write_suspended_task(suspended_task st)
 {
-    dbio_printf("%d %d ", st.start_time, st.the_vm->task_id);
+    dbio_printf("%d %d,%d ", ROUND(&st.start_tv), st.the_vm->task_id, st.ignore_value);
     dbio_write_var(st.value);
     write_vm(st.the_vm);
 }
@@ -1223,7 +1257,7 @@ read_task_queue(void)
     for (; count > 0; count--) {
 	int first_lineno, id, old_size, st;
 	char c;
-	time_t start_time;
+	struct timeval start_tv;
 	Program *program;
 	Var *rt_env, *old_rt_env;
 	const char **old_names;
@@ -1235,7 +1269,8 @@ read_task_queue(void)
 	    errlog("READ_TASK_QUEUE: Bad numbers, count = %d.\n", count);
 	    return 0;
 	}
-	start_time = st;
+	start_tv.tv_sec = st;
+	start_tv.tv_usec = 0;
 	if (!read_activ_as_pi(&a)) {
 	    errlog("READ_TASK_QUEUE: Bad activation, count = %d.\n", count);
 	    return 0;
@@ -1252,7 +1287,7 @@ read_task_queue(void)
 	rt_env = reorder_rt_env(old_rt_env, old_names, old_size, program);
 	program->first_lineno = first_lineno;
 
-	enqueue_ft(program, a, rt_env, MAIN_VECTOR, start_time, id);
+	enqueue_ft(program, a, rt_env, MAIN_VECTOR, start_tv, id);
     }
 
     suspended_task_header = dbio_scanf("%d suspended tasks\n",
@@ -1266,16 +1301,30 @@ read_task_queue(void)
     }
     for (; suspended_count > 0; suspended_count--) {
 	task *t = (task *) mymalloc(sizeof(task), M_TASK);
-	int task_id, start_time;
+	int task_id, st, ignore_value;
 	char c;
 
 	t->kind = TASK_SUSPENDED;
-	if (dbio_scanf("%d %d%c", &start_time, &task_id, &c) != 3) {
+	if (dbio_scanf("%d %d%c", &st, &task_id, &c) != 3) {
 	    errlog("READ_TASK_QUEUE: Bad suspended task header, count = %d\n",
 		   suspended_count);
 	    return 0;
 	}
-	t->t.suspended.start_time = start_time;
+	t->t.suspended.start_tv.tv_sec = st;
+	t->t.suspended.start_tv.tv_usec = 0;
+	
+	if (c == ',') {
+	    /* new style */
+	    if (dbio_scanf("%d%c", &ignore_value, &c) != 2) {
+	    	errlog("READ_TASK_QUEUE: Bad suspended task ignore_value, count = %d\n",
+		        suspended_count);
+		return 0;
+	    }
+	    t->t.suspended.ignore_value = ignore_value;
+	} else {
+	    t->t.suspended.ignore_value = 0;
+	}
+	
 	if (c == ' ')
 	    t->t.suspended.value = dbio_read_var();
 	else if (c == '\n')
@@ -1421,9 +1470,9 @@ list_for_forked_task(forked_task ft)
     list.v.list[1].type = TYPE_INT;
     list.v.list[1].v.num = ft.id;
     list.v.list[2].type = TYPE_INT;
-    list.v.list[2].v.num = ft.start_time;
+    list.v.list[2].v.num = ROUND(&ft.start_tv);
     list.v.list[3].type = TYPE_INT;
-    list.v.list[3].v.num = 0;	/* OBSOLETE: was clock ID */
+    list.v.list[3].v.num = ft.a.cputime;
     list.v.list[4].type = TYPE_INT;
     list.v.list[4].v.num = DEFAULT_BG_TICKS;	/* OBSOLETE: was clock ticks */
     list.v.list[5].type = TYPE_OBJ;
@@ -1451,7 +1500,7 @@ list_for_vm(vm the_vm)
     list.v.list[1].v.num = the_vm->task_id;
 
     list.v.list[3].type = TYPE_INT;
-    list.v.list[3].v.num = 0;	/* OBSOLETE: was clock ID */
+    list.v.list[3].v.num = top_activ(the_vm).cputime;
     list.v.list[4].type = TYPE_INT;
     list.v.list[4].v.num = DEFAULT_BG_TICKS;	/* OBSOLETE: was clock ticks */
     list.v.list[5].type = TYPE_OBJ;
@@ -1475,9 +1524,18 @@ list_for_suspended_task(suspended_task st)
 
     list = list_for_vm(st.the_vm);
     list.v.list[2].type = TYPE_INT;
-    list.v.list[2].v.num = st.start_time;
+    list.v.list[2].v.num = ROUND(&st.start_tv);
 
     return list;
+}
+
+Var
+list_for_last_suspended_task()
+{
+    if (!last_suspended_task)
+	return new_list(0);
+
+    return list_for_suspended_task(last_suspended_task->t.suspended);
 }
 
 static Var
@@ -1794,6 +1852,64 @@ bf_kill_task(Var arglist, Byte next, void *vdata, Objid progr)
     return no_var_pack();
 }
 
+static int
+task_valid(int id)
+{
+    task      **tt;
+    tqueue     *tq;
+
+    /* This one is a no brainer */
+    if (id == current_task_id) {
+      return 1;
+    }
+
+    /* Check forked and suspended tasks */
+    for (tt = &waiting_tasks; *tt; tt = &((*tt)->next)) {
+      task *t = *tt;
+      if (t->kind == TASK_FORKED && t->t.forked.id == id)
+        return 1;
+      else if (t->kind == TASK_SUSPENDED &&
+               t->t.suspended.the_vm->task_id == id)
+        return 1;
+    }
+
+    /* Check idle task queues */
+    for (tq = idle_tqueues; tq; tq = tq->next) {
+      if (tq->reading && tq->reading_vm->task_id == id)
+        return 1;
+    }
+
+    /* Check for active tasks */
+    for (tq = active_tqueues; tq; tq = tq->next) {
+
+      if (tq->reading && tq->reading_vm->task_id == id)
+        return 1;
+
+      for (tt = &(tq->first_bg); *tt; tt = &((*tt)->next)) {
+        task *t = *tt;
+        if ((t->kind == TASK_FORKED
+                && t->t.forked.id == id) ||
+            (t->kind == TASK_SUSPENDED
+                && t->t.suspended.the_vm->task_id == id))
+          return 1;
+      }
+    }
+
+    /* We found nothing, the task is not valid */
+    return 0;
+}
+
+static package
+bf_task_valid(Var arglist, Byte next, void *vdata, Objid progr)
+{
+    Var vr;
+    vr.type = TYPE_INT;
+    vr.v.num = task_valid(arglist.v.list[1].v.num);
+    free_var(arglist);
+    return make_var_pack(vr);
+}
+
+
 static enum error
 do_resume(int id, Var value, Objid progr)
 {
@@ -1811,7 +1927,7 @@ do_resume(int id, Var value, Objid progr)
 
 	if (!is_wizard(progr) && progr != owner)
 	    return E_PERM;
-	t->t.suspended.start_time = time(0);	/* runnable now */
+	gettimeofday(&t->t.suspended.start_tv, NULL);	/* runnable now */
 	free_var(t->t.suspended.value);
 	t->t.suspended.value = value;
 	tq = find_tqueue(owner, 1);
@@ -1929,12 +2045,75 @@ bf_flush_input(Var arglist, Byte next, void *vdata, Objid progr)
     return no_var_pack();
 }
 
+#ifdef CONNECTION_TRANSFERS
+static package
+bf_transfer_connection(Var arglist, Byte next, void *vdata, Objid progr)
+{                               /* (fromconn, toconn) */
+    Objid old_o = arglist.v.list[1].v.obj;
+    Objid new_o  = arglist.v.list[2].v.obj;
+
+    tqueue *tq;
+    tqueue *dead_tq;
+
+    if (!is_wizard(progr)) {
+        free_var(arglist);
+        return make_error_pack(E_PERM);
+    }
+
+    tq = find_tqueue(old_o, 0);
+
+    if (!tq) {
+	free_var(arglist);
+	return make_error_pack(E_INVARG);
+    }
+
+    dead_tq = find_tqueue(new_o, 0);
+    task *t;
+
+    tq->player = new_o;
+
+    if (tq->num_bg_tasks) {
+	/* move forked tasks to their own queue
+	 * owned by old oid 
+	 */
+	tqueue *old_tq = find_tqueue(old_o, 1);
+
+	old_tq->num_bg_tasks = tq->num_bg_tasks;
+	while ((t = dequeue_bg_task(tq)) != 0)
+	    enqueue_bg_task(old_tq, t);
+	tq->num_bg_tasks = 0;
+    }
+
+    if (dead_tq) { 
+	/* tasks laying around (forked, etc)
+	 * owned by new oid, we must grab them
+	 */
+	tq->num_bg_tasks = dead_tq->num_bg_tasks;
+	while ((t = dequeue_any_task(dead_tq)) != 0) {
+	    if (t->kind == TASK_INPUT)
+		free_task(t, 0);
+	    else            /* FORKED or SUSPENDED */
+		enqueue_bg_task(tq, t);
+	}
+
+	dead_tq->player = NOTHING;  /* it'll be freed by run_ready_tasks */
+	dead_tq->num_bg_tasks = 0;
+    }
+    server_connection_transferred(old_o, new_o);
+
+    free_var(arglist);
+    return no_var_pack();
+}
+#endif
+
+
 void
 register_tasks(void)
 {
     register_function("task_id", 0, 0, bf_task_id);
     register_function("queued_tasks", 0, 0, bf_queued_tasks);
     register_function("kill_task", 1, 1, bf_kill_task, TYPE_INT);
+    register_function("task_valid", 1, 1, bf_task_valid, TYPE_INT);
     register_function("output_delimiters", 1, 1, bf_output_delimiters,
 		      TYPE_OBJ);
     register_function("queue_info", 0, 1, bf_queue_info, TYPE_OBJ);
@@ -1942,12 +2121,36 @@ register_tasks(void)
     register_function("force_input", 2, 3, bf_force_input,
 		      TYPE_OBJ, TYPE_STR, TYPE_ANY);
     register_function("flush_input", 1, 2, bf_flush_input, TYPE_OBJ, TYPE_ANY);
+#ifdef CONNECTION_TRANSFERS
+    register_function("transfer_connection", 2, 2, bf_transfer_connection,
+		      TYPE_OBJ, TYPE_OBJ);
+#endif
 }
 
-char rcsid_tasks[] = "$Id: tasks.c,v 1.5 1998/12/14 13:19:07 nop Exp $";
+char rcsid_tasks[] = "$Id: tasks.c,v 1.10 2010/05/17 07:25:35 blacklite Exp $";
 
 /* 
  * $Log: tasks.c,v $
+ * Revision 1.10  2010/05/17 07:25:35  blacklite
+ * last fixes for 1.10.4
+ *
+ * Revision 1.9  2009/08/14 21:35:38  blacklite
+ * call #0:task_suspended whenever it happens.
+ *
+ * Revision 1.8  2009/07/26 21:57:42  blacklite
+ * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
+ * function and various supporting things. Which don't actually work without
+ * causing segfaults, but, hey, it's a start.
+ *
+ * Revision 1.7  2009/07/26 20:00:07  blacklite
+ * add NON_PLAYER_CONNECTIONS define
+ *
+ * Revision 1.6  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.5  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:19:07  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

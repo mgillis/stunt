@@ -125,6 +125,7 @@ struct prec {
 static struct prec prec_table[] =
 {
     {EXPR_ASGN, 1},
+    {EXPR_HASHENTRY, 1},
 
     {EXPR_COND, 2},		/* the unparser for this depends on only ASGN having
 				   lower precedence.  Fix that if this changes. */
@@ -161,7 +162,8 @@ static struct prec prec_table[] =
     {EXPR_LIST, 10},
     {EXPR_CALL, 10},
     {EXPR_LENGTH, 10},
-    {EXPR_CATCH, 10}
+    {EXPR_CATCH, 10},
+    {EXPR_HASH, 10}
 };
 
 static int expr_prec[SizeOf_Expr_Kind];
@@ -188,6 +190,7 @@ static struct binop binop_table[] =
     {EXPR_DIVIDE, " / "},
     {EXPR_MOD, " % "},
     {EXPR_EXP, " ^ "},
+    {EXPR_HASHENTRY, " -> "},
 };
 
 static const char *binop_string[SizeOf_Expr_Kind];
@@ -450,6 +453,15 @@ unparse_stmt(Stmt * stmt, int indent)
 		output(str);
 	    }
 	    break;
+	case STMT_YIELD:
+	    if (stmt->s.expr) {
+		stream_add_string(str, "yield ");
+		unparse_expr(str, stmt->s.expr);
+	    } else
+		stream_add_string(str, "yield");
+	    stream_add_char(str, ';');
+	    output(str);
+	    break;
 	default:
 	    errlog("UNPARSE_STMT: Unknown Stmt_Kind: %d\n", stmt->kind);
 	    stream_add_string(str, "?!?!?!?;");
@@ -582,6 +594,12 @@ unparse_expr(Stream * str, Expr * expr)
 	bracket_lt(str, expr->kind, expr->e.bin.rhs);
 	break;
 
+    case EXPR_HASHENTRY:
+	bracket_le(str, expr->kind, expr->e.bin.lhs);
+	stream_add_string(str, binop_string[expr->kind]);
+	bracket_le(str, expr->kind, expr->e.bin.rhs);
+	break;
+
     case EXPR_COND:
 	bracket_le(str, EXPR_COND, expr->e.cond.condition);
 	stream_add_string(str, " ? ");
@@ -619,6 +637,17 @@ unparse_expr(Stream * str, Expr * expr)
 
     case EXPR_ID:
 	stream_add_string(str, prog->var_names[expr->e.id]);
+	break;
+	
+    case EXPR_HASH:
+	stream_add_char(str, '[');
+	/* we have an arglist here that has a list inside of it */
+	Arg_List *args = expr->e.list;
+	if (args) {
+		Expr *hashentry_list = args->expr;
+		unparse_arglist(str, hashentry_list->e.list);
+	}
+	stream_add_char(str, ']');
 	break;
 
     case EXPR_LIST:
@@ -732,10 +761,21 @@ unparse_to_stderr(Program * p, int fully_parenthesize, int indent_lines,
     unparse_to_file(stderr, p, fully_parenthesize, indent_lines, f_index);
 }
 
-char rcsid_unparse[] = "$Id: unparse.c,v 1.3 1998/12/14 13:19:12 nop Exp $";
+char rcsid_unparse[] = "$Id: unparse.c,v 1.5 2009/03/27 20:26:49 blacklite Exp $";
 
 /* 
  * $Log: unparse.c,v $
+ * Revision 1.5  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:19:12  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

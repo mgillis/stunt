@@ -107,7 +107,12 @@ struct mapping ext_mappings[] =
     {EOP_CONTINUE, "CONTINUE"},
     {EOP_WHILE_ID, "WHILE_ID"},
     {EOP_EXIT, "EXIT"},
-    {EOP_EXIT_ID, "EXIT_ID"}};
+    {EOP_EXIT_ID, "EXIT_ID"},
+    {EOP_MAKE_HASH, "MAKE_HASH"},
+    {EOP_MAKE_HASHENTRY, "MAKE_HASHENTRY"},
+    {EOP_YIELD, "YIELD"},
+    {EOP_YIELD0, "YIELD DEFAULT_YIELD_TIME"}
+};
 
 static void
 initialize_tables(void)
@@ -476,6 +481,12 @@ char rcsid_disassemble[] = "$Id";
 
 /* 
  * $Log: disassemble.c,v $
+ * Revision 1.4  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:17:42  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

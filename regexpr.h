@@ -117,6 +117,9 @@ int re_exec(char *s);
 /* RCS stuff added for LambdaMOO
 
  * $Log: regexpr.h,v $
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.2  1997/03/03 04:19:23  nop
  * GNU Indent normalization
  *

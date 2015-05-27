@@ -29,6 +29,7 @@
 #include "db_private.h"
 #include "exceptions.h"
 #include "list.h"
+#include "hash.h"
 #include "log.h"
 #include "numbers.h"
 #include "parser.h"
@@ -38,6 +39,7 @@
 #include "str_intern.h"
 #include "unparse.h"
 #include "version.h"
+#include "waif.h"
 
 
 /*********** Input ***********/
@@ -59,22 +61,23 @@ dbio_read_line(char *s, int n)
 int
 dbio_scanf(const char *format,...)
 {
-    va_list args;
     int count;
-    const char *ptr;
+    va_list args;
 
     va_start(args, format);
-    /* The following line would be nice, but unfortunately those darlings on
-     * the ANSI C committee apparently didn't feel it worthwhile to include
-     * support for functions wrapping `scanf' *even though* they included
-     * symmetric such support for functions wrapping `printf'.  (*sigh*)
-     * Fortunately, we only use a small fraction of the full functionality of
-     * scanf in the server, so it's not unbearably unpleasant to have to
-     * reimplement it here.
+
+#ifndef NDECL_VFSCANF
+    count = vfscanf(input, format, args);
+
+#else
+    /* vfscanf() was a great idea that only appeared in the C99
+     * standard, so we aren't always going to have it.
      */
-    /*  count = vfscanf(input, format, args);  */
+
+    const char *ptr;
 
     count = 0;
+
     for (ptr = format; *ptr; ptr++) {
 	int c, n, *ip;
 	unsigned *up;
@@ -121,6 +124,7 @@ dbio_scanf(const char *format,...)
 		panic("DBIO_SCANF: Unsupported directive!");
 	    }
     }
+#endif /* NDECL_VFSCANF */
 
     va_end(args);
 
@@ -237,8 +241,17 @@ dbio_read_var(void)
     case _TYPE_LIST:
 	l = dbio_read_num();
 	r = new_list(l);
-	for (i = 0; i < l; i++)
-	    r.v.list[i + 1] = dbio_read_var();
+	for (i = 1; i <= l; i++)
+	    r.v.list[i] = dbio_read_var();
+	break;
+    case _TYPE_HASH:
+    	l = dbio_read_num();
+    	r = alloc_list_for_hash(l);
+	for (i = 1; i <= l; i++)
+	    r.v.list[i] = dbio_read_var();
+	break;
+    case _TYPE_WAIF:
+	r = read_waif();
 	break;
     default:
 	errlog("DBIO_READ_VAR: Unknown type (%d) at DB file pos. %ld\n",
@@ -389,9 +402,13 @@ dbio_write_var(Var v)
 	dbio_write_float(*v.v.fnum);
 	break;
     case TYPE_LIST:
+    case TYPE_HASH:
 	dbio_write_num(v.v.list[0].v.num);
-	for (i = 0; i < v.v.list[0].v.num; i++)
-	    dbio_write_var(v.v.list[i + 1]);
+	for (i = 1; i <= v.v.list[0].v.num; i++)
+	    dbio_write_var(v.v.list[i]);
+	break;
+    case TYPE_WAIF:
+	write_waif(v);
 	break;
     }
 }
@@ -416,10 +433,18 @@ dbio_write_forked_program(Program * program, int f_index)
     dbio_printf(".\n");
 }
 
-char rcsid_db_io[] = "$Id: db_io.c,v 1.5 1998/12/14 13:17:34 nop Exp $";
+char rcsid_db_io[] = "$Id: db_io.c,v 1.4 2009/03/08 12:41:31 blacklite Exp $";
 
 /* 
  * $Log: db_io.c,v $
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.5  1998/12/14 13:17:34  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

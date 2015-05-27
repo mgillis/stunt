@@ -208,10 +208,13 @@ delref(const void *p)
 }
 #endif
 
-char rcsid_ref_count[] = "$Id: ref_count.c,v 1.4 1998/12/14 13:18:54 nop Exp $";
+char rcsid_ref_count[] = "$Id: ref_count.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* 
  * $Log: ref_count.c,v $
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:18:54  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

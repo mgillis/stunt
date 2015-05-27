@@ -279,6 +279,7 @@ free_expr(Expr * expr)
     case EXPR_IN:
     case EXPR_ASGN:
     case EXPR_EXP:
+    case EXPR_HASHENTRY:
 	free_expr(expr->e.bin.lhs);
 	free_expr(expr->e.bin.rhs);
 	break;
@@ -311,6 +312,7 @@ free_expr(Expr * expr)
 	break;
 
     case EXPR_LIST:
+    case EXPR_HASH:
 	free_arg_list(expr->e.list);
 	break;
 
@@ -379,6 +381,7 @@ free_stmt(Stmt * stmt)
 
 	case STMT_EXPR:
 	case STMT_RETURN:
+	case STMT_YIELD:
 	    if (stmt->s.expr)
 		free_expr(stmt->s.expr);
 	    break;
@@ -400,7 +403,7 @@ free_stmt(Stmt * stmt)
 
 	case STMT_BREAK:
 	case STMT_CONTINUE:
-	    break;		/* Nothing extra to free */
+	    break;              /* Nothing extra to free */
 
 	default:
 	    errlog("FREE_STMT: unknown Stmt_Kind: %d\n", stmt->kind);
@@ -411,10 +414,21 @@ free_stmt(Stmt * stmt)
     }
 }
 
-char rcsid_ast[] = "$Id: ast.c,v 1.3 1998/12/14 13:17:26 nop Exp $";
+char rcsid_ast[] = "$Id: ast.c,v 1.5 2009/03/27 20:26:48 blacklite Exp $";
 
 /* 
  * $Log: ast.c,v $
+ * Revision 1.5  2009/03/27 20:26:48  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.4  2009/03/08 12:41:30  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:17:26  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

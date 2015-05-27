@@ -5,6 +5,9 @@
 #include "str_intern.h"
 #include "utils.h"
 
+#ifdef VALGRIND
+#include <valgrind/memcheck.h>
+#endif VALGRIND
 
 struct intern_entry {
     const char *s;
@@ -41,6 +44,10 @@ new_intern_entry_hunk(int size)
     new->handout = 0;
     new->contents = mymalloc(sizeof(struct intern_entry) * size, M_INTERN_ENTRY);
     new->next = NULL;
+
+#ifdef VALGRIND
+    VALGRIND_CREATE_MEMPOOL(new->contents, 0, 0);
+#endif
     
     return new;
 }
@@ -61,6 +68,9 @@ allocate_intern_entry(void)
         
         e = &(intern_alloc->contents[intern_alloc->handout]);
         intern_alloc->handout++;
+#ifdef VALGRIND
+        VALGRIND_MEMPOOL_ALLOC(intern_alloc->contents, e, sizeof(struct intern_entry));
+#endif
         
         return e;
     } else {
@@ -79,8 +89,11 @@ free_intern_entry_hunks(void)
     
     for (h = intern_alloc; h; h = next) {
         next = h->next;
-        free(h->contents);
-        free(h);
+        myfree(h->contents, M_INTERN_ENTRY);
+#ifdef VALGRIND
+        VALGRIND_DESTROY_MEMPOOL(h->contents);
+#endif
+        myfree(h, M_INTERN_HUNK);
     }
     
     intern_alloc = NULL;
@@ -134,7 +147,6 @@ extern void str_intern_close(void)
             next = e->next;
             
             free_str(e->s);
-            
             /* myfree(e, M_INTERN_ENTRY); */
         }
     }

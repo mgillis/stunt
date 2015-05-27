@@ -120,10 +120,13 @@ read_vm(int task_id)
     return the_vm;
 }
 
-char rcsid_eval_vm[] = "$Id: eval_vm.c,v 1.3 1998/12/14 13:17:46 nop Exp $";
+char rcsid_eval_vm[] = "$Id: eval_vm.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* 
  * $Log: eval_vm.c,v $
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.3  1998/12/14 13:17:46  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *

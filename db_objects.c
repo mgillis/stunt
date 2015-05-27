@@ -19,6 +19,8 @@
  * Routines for manipulating DB objects
  *****************************************************************************/
 
+#include "my-string.h"
+
 #include "config.h"
 #include "db.h"
 #include "db_private.h"
@@ -92,6 +94,7 @@ dbpriv_new_object(void)
     ensure_new_object();
     o = objects[num_objects] = mymalloc(sizeof(Object), M_OBJECT);
     o->id = num_objects;
+    o->waif_propdefs = NULL;
     num_objects++;
 
     return o;
@@ -117,6 +120,7 @@ db_create_object(void)
     o->flags = 0;
     o->parent = o->child = o->sibling = NOTHING;
     o->location = o->contents = o->next = NOTHING;
+    o->lastchild = o->lastcontents = NOTHING;
 
     o->propval = 0;
 
@@ -204,6 +208,11 @@ db_renumber_object(Objid old)
 		    if (*oidp == NOTHING)
 			panic("Object not in parent's children list");
 		    *oidp = new;
+
+		    /* find end of list */
+		    while (objects[*oidp]->sibling != NOTHING)
+			oidp = &objects[*oidp]->sibling;
+		    objects[o->parent]->lastchild = *oidp;
 		}
 		for (oid = o->child;
 		     oid != NOTHING;
@@ -222,6 +231,11 @@ db_renumber_object(Objid old)
 		    if (*oidp == NOTHING)
 			panic("Object not in location's contents list");
 		    *oidp = new;
+
+                    /* find end of list */
+                    while (objects[*oidp]->next != NOTHING)
+                        oidp = &objects[*oidp]->next;
+                    objects[o->location]->lastcontents = *oidp;
 		}
 		for (oid = o->contents;
 		     oid != NOTHING;
@@ -371,35 +385,125 @@ db_for_all_children(Objid oid, int (*func) (void *, Objid), void *data)
     return 0;
 }
 
-#define LL_REMOVE(where, listname, what, nextname) { \
-    Objid lid; \
-    if (objects[where]->listname == what) \
-	objects[where]->listname = objects[what]->nextname; \
-    else { \
-	for (lid = objects[where]->listname; lid != NOTHING; \
-	      lid = objects[lid]->nextname) { \
-	    if (objects[lid]->nextname == what) { \
-		objects[lid]->nextname = objects[what]->nextname; \
-		break; \
-	    } \
-	} \
-    } \
-    objects[what]->nextname = NOTHING; \
+/* REMOVE:
+ * if start & end == this, then start & end == nothing.
+ *
+ * if start == this, start = this->next.
+ *
+ * else, it's not the beginning, so:
+ *   find the one before it
+ *      (lid = start; lid = lid->next until lid = nothing)
+ *   if found,
+ *      lid->next = what->next, and end search.
+ *   if end == what, end = lid.
+ *
+ * in all cases, set what->next = NOTHING.
+ */
+void remove_from_contents(Objid locnum, Objid thisnum) {
+    
+    if (objects[locnum]->contents == thisnum) {
+      if (objects[locnum]->lastcontents == thisnum) {
+        objects[locnum]->contents = NOTHING;
+        objects[locnum]->lastcontents = NOTHING;
+      }
+      else {
+        objects[locnum]->contents = objects[thisnum]->next;
+      }
+    }
+    else {
+      /* gotta search for it! */
+      Objid curr;
+ 
+      for (curr = objects[locnum]->contents;
+           curr != NOTHING;
+           curr = objects[curr]->next) {
+        if (objects[curr]->next == thisnum) {
+          /* found the one before it... */
+          objects[curr]->next = objects[thisnum]->next;
+
+          /* was 'this' last? */
+          if (objects[locnum]->lastcontents == thisnum) {
+            objects[locnum]->lastcontents = curr;
+          }
+          break;
+        }
+      }
+    }
+     
+    /* finally, ensure this's next is nothing. */
+    objects[thisnum]->next = NOTHING;
 }
 
-#define LL_APPEND(where, listname, what, nextname) { \
-    Objid lid; \
-    if (objects[where]->listname == NOTHING) { \
-	objects[where]->listname = what; \
-    } else { \
-	for (lid = objects[where]->listname; \
-	     objects[lid]->nextname != NOTHING; \
-	     lid = objects[lid]->nextname) \
-	    ; \
-	objects[lid]->nextname = what; \
-    } \
-    objects[what]->nextname = NOTHING; \
+void remove_from_children(Objid parnum, Objid thisnum) {
+
+    if (objects[parnum]->child == thisnum) {
+      if (objects[parnum]->lastchild == thisnum) {
+        objects[parnum]->child = NOTHING;
+        objects[parnum]->lastchild = NOTHING;
+      }
+      else {
+        objects[parnum]->child = objects[thisnum]->sibling;
+      }
+    }
+    else {
+      /* gotta search for it! */
+      Objid curr;
+
+      for (curr = objects[parnum]->child;
+           curr != NOTHING;
+           curr = objects[curr]->sibling) {
+        if (objects[curr]->sibling == thisnum) {
+          /* found the one before it... */
+          objects[curr]->sibling = objects[thisnum]->sibling;
+
+          /* was 'this' last? */
+          if (objects[parnum]->lastchild == thisnum) {
+            objects[parnum]->lastchild = curr;
+          }
+          break;
+        }
+      }
+    }
+
+    /* finally, ensure this's sibling is nothing. */
+    objects[thisnum]->sibling = NOTHING;
 }
+
+ 
+/* APPEND:
+ * if list has an end: lid = end, lid->next = this.
+ *                     then, end = this.
+ *
+ * if list has no end: start = this, end = this.
+ */
+void add_to_contents(Objid locnum, Objid thisnum) {
+    
+    /* do we have an end? if so, easy */
+    if (objects[locnum]->lastcontents != NOTHING) {
+       Objid lastnum = objects[locnum]->lastcontents;
+       objects[locnum]->lastcontents = thisnum;
+       objects[lastnum]->next = thisnum;
+    }
+    else {
+       /* this is also easy */
+       objects[locnum]->lastcontents = thisnum;
+       objects[locnum]->contents = thisnum;
+    }
+}
+
+void add_to_children(Objid parnum, Objid thisnum) {
+
+    if (objects[parnum]->lastchild != NOTHING) {
+       Objid lastnum = objects[parnum]->lastchild;
+       objects[parnum]->lastchild = thisnum;
+       objects[lastnum]->sibling = thisnum;
+    }
+    else {
+       objects[parnum]->lastchild = thisnum;
+       objects[parnum]->child = thisnum;
+    }
+}
+
 
 int
 db_change_parent(Objid oid, Objid parent)
@@ -425,10 +529,10 @@ db_change_parent(Objid oid, Objid parent)
     old_parent = objects[oid]->parent;
 
     if (old_parent != NOTHING)
-	LL_REMOVE(old_parent, child, oid, sibling);
+	remove_from_children(old_parent, oid);
 
     if (parent != NOTHING)
-	LL_APPEND(parent, child, oid, sibling);
+        add_to_children(parent, oid);
 
     objects[oid]->parent = parent;
     dbpriv_fix_properties_after_chparent(oid, old_parent);
@@ -466,16 +570,56 @@ db_for_all_contents(Objid oid, int (*func) (void *, Objid), void *data)
     return 0;
 }
 
+Objid
+db_first_contents(Objid oid)
+{
+        Object *o = dbpriv_find_object(oid);
+
+        if (!o)
+                return NOTHING;
+        return o->contents;
+}
+
+Objid
+db_last_contents(Objid oid) 
+{
+        Object *o = dbpriv_find_object(oid);
+
+        if (!o)
+                return NOTHING;
+        return o->lastcontents;
+}
+
+Objid
+db_first_child(Objid oid)
+{
+        Object *o = dbpriv_find_object(oid);
+
+        if (!o)
+                return NOTHING;
+        return o->child;
+}
+
+Objid
+db_last_child(Objid oid)
+{
+        Object *o = dbpriv_find_object(oid);
+
+        if (!o)
+                return NOTHING;
+        return o->lastchild;
+}
+
 void
 db_change_location(Objid oid, Objid location)
 {
     Objid old_location = objects[oid]->location;
 
     if (valid(old_location))
-	LL_REMOVE(old_location, contents, oid, next);
+	remove_from_contents(old_location, oid);
 
     if (valid(location))
-	LL_APPEND(location, contents, oid, next);
+	add_to_contents(location, oid);
 
     objects[oid]->location = location;
 }
@@ -538,6 +682,123 @@ is_user(Objid oid)
     return valid(oid) && db_object_has_flag(oid, FLAG_USER);
 }
 
+#define OCCUPANTS_LIST_STARTSIZE 32
+
+void
+db_object_occupants(Objid oid_what, Objid oid_parent, Var * value)
+{
+    Var result, newresult;
+    int slots, next_empty, i;
+    Objid c;
+
+    if (objects[oid_what]->contents == NOTHING) {
+	*value = zero;
+	return;
+    }
+
+    result = new_list(OCCUPANTS_LIST_STARTSIZE);
+    slots = OCCUPANTS_LIST_STARTSIZE;
+    next_empty = 1;
+
+    for (c = objects[oid_what]->contents; c != NOTHING; c = objects[c]->next) {
+	if (is_a(c, oid_parent)) {
+	    result.v.list[next_empty].type = TYPE_OBJ;
+	    result.v.list[next_empty].v.obj = c;
+	    next_empty++;
+
+	    if (next_empty > slots) {
+		newresult = new_list(slots * 2);
+		/* i can skip var_dup here because i know it's all objs */
+		for (i = 1; i <= slots; i++)
+		    newresult.v.list[i] = result.v.list[i];
+		free_var(result);
+		result = newresult;
+		slots = slots * 2;
+	    }
+	}
+    }
+    for (i = next_empty; i <= slots; i++) {
+	result.v.list[i] = zero;
+    }
+   
+    *value = sublist(result, 1, next_empty - 1);
+    return;
+}
+
+int
+is_a(Objid oid_what, Objid oid_parent)
+{
+    if (!valid(oid_what)) {
+	return 0;
+    }
+
+    if (oid_parent == NOTHING) {
+	/* avoid zen meaninglessness */
+	return 0;
+    }
+    if (!valid(oid_parent)) {
+	/* non-nothing invalid parents */
+	return 0;
+    }
+    while (valid(oid_what)) {
+	if (oid_what == oid_parent) {
+		return 1;
+	}
+	oid_what = objects[oid_what]->parent;
+    }
+
+    return 0;
+}
+
+int
+is_in(Objid oid_what, Objid oid_where)
+{
+    if (!valid(oid_what)) {
+	return 0;
+    }
+    Objid loc = objects[oid_what]->location;
+
+    if (oid_where == NOTHING) {
+	/* avoid zen meaninglessness */
+	return 0;
+    }
+    if (!valid(oid_where)) {
+	/* non-nothing invalid locations can't contain things */
+	return 0;
+    }
+    while (valid(loc)) {
+	if (loc == oid_where) {
+		return 1;
+	}
+	loc = objects[loc]->location;
+    }
+
+    return 0;
+}
+
+int
+is_in_a(Objid oid_what, Objid oid_type_of_location)
+{
+    if (!valid(oid_what)) {
+        return 0;
+    }
+    Objid loc = objects[oid_what]->location;
+
+    if (oid_type_of_location == NOTHING || 
+	!valid(oid_type_of_location)) {
+        return 0;
+    }
+    while (valid(loc)) {
+        if (is_a(loc, oid_type_of_location)) {
+                return 1;
+        }
+        loc = objects[loc]->location;
+    }
+
+    return 0;
+}
+
+
 Var
 db_all_users(void)
 {
@@ -550,10 +811,47 @@ dbpriv_set_all_users(Var v)
     all_users = v;
 }
 
-char rcsid_db_objects[] = "$Id: db_objects.c,v 1.4 1998/12/14 13:17:36 nop Exp $";
+char rcsid_db_objects[] = "$Id: db_objects.c,v 1.14 2010/05/17 01:49:02 blacklite Exp $";
 
 /* 
  * $Log: db_objects.c,v $
+ * Revision 1.14  2010/05/17 01:49:02  blacklite
+ * add bf_occupants
+ *
+ * Revision 1.13  2010/05/16 02:41:03  blacklite
+ * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
+ *
+ * Revision 1.12  2009/10/11 18:31:33  blacklite
+ * explictly return 0 for #-1 in is_in_a
+ *
+ * Revision 1.11  2009/09/29 20:53:02  blacklite
+ * patch renumber() so it might work, not that anyone ever uses it; remove redundant lines from is_in_a.
+ *
+ * Revision 1.10  2009/07/27 01:45:54  blacklite
+ * add is_in_a
+ *
+ * Revision 1.9  2009/07/26 20:01:46  blacklite
+ * fix is_a and is_in for #-1 (no zen) :(
+ *
+ * Revision 1.8  2009/07/23 04:33:27  blacklite
+ * fix typo in is_in()
+ *
+ * Revision 1.7  2009/07/22 23:14:23  blacklite
+ * add internal is_a and is_in, and moo functions which pass to each.
+ *
+ * Revision 1.6  2008/08/23 21:30:14  blacklite
+ * Fix LL_REMOVE and LL_APPEND and turn them into functions (add_to* and remove_from*.)
+ *
+ * Revision 1.5  2008/08/22 22:09:20  blacklite
+ * Add lastchild and lastcontents to make linked lists both undumb and fast.
+ * (As opposed to my insert-at-the-front hack which was fast but dumb.)
+ *
+ * Revision 1.4  2008/08/20 18:38:34  blacklite
+ * Change linked list handling -- insert at front, not append at back.
+ *
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:17:36  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *
@@ -596,3 +894,4 @@ char rcsid_db_objects[] = "$Id: db_objects.c,v 1.4 1998/12/14 13:17:36 nop Exp $
  * Revision 1.1  1995/11/30  04:20:41  pavel
  * Initial revision
  */
+

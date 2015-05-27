@@ -249,10 +249,13 @@ free_parsed_command(Parsed_Command * pc)
 }
 
 
-char rcsid_parse_cmd[] = "$Id: parse_cmd.c,v 1.4 1998/12/14 13:18:42 nop Exp $";
+char rcsid_parse_cmd[] = "$Id: parse_cmd.c,v 1.3 2007/09/12 07:33:29 spunky Exp $";
 
 /* 
  * $Log: parse_cmd.c,v $
+ * Revision 1.3  2007/09/12 07:33:29  spunky
+ * This is a working version of the current HellMOO server
+ *
  * Revision 1.4  1998/12/14 13:18:42  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *
