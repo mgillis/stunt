@@ -79,7 +79,7 @@ program_bytes(Program * p)
 
     count += sizeof(const char *) * p->num_var_names;
     for (i = 0; i < p->num_var_names; i++)
-	count += strlen(p->var_names[i]) + 1;
+	count += memo_strlen(p->var_names[i]) + 1;
 
     return count;
 }
@@ -113,15 +113,16 @@ free_program(Program * p)
     }
 }
 
-char rcsid_program[] = "$Id: program.c,v 1.4 2009/10/11 00:24:18 blacklite Exp $";
+char rcsid_program[] = "$Id: program.c,v 1.6 2006/09/07 00:55:02 bjj Exp $";
 
 /* 
  * $Log: program.c,v $
- * Revision 1.4  2009/10/11 00:24:18  blacklite
- * initialize cached_lineno_vec
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.6  2006/09/07 00:55:02  bjj
+ * Add new MEMO_STRLEN option which uses the refcounting mechanism to
+ * store strlen with strings.  This is basically free, since most string
+ * allocations are rounded up by malloc anyway.  This saves lots of cycles
+ * computing strlen.  (The change is originally from jitmoo, where I wanted
+ * inline range checks for string ops).
  *
  * Revision 1.5  1998/12/14 13:18:48  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
@@ -176,4 +177,9 @@ char rcsid_program[] = "$Id: program.c,v 1.4 2009/10/11 00:24:18 blacklite Exp $
  *
  * Revision 1.1  1992/07/20  23:23:12  pavel
  * Initial RCS-controlled version.
+ */
+
+/* Hellmoo changes:
+ * Revision 1.4  2009/10/11 00:24:18  blacklite
+ * initialize cached_lineno_vec
  */

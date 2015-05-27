@@ -61,27 +61,34 @@ extern void verify_mem(void);
 extern int set_live_trace(int);
 #endif
 
-static inline void    /* XXX was extern, fix for non-gcc compilers */
+static inline void		/* XXX was extern, fix for non-gcc compilers */
 free_str(const char *s)
 {
     if (delref(s) == 0)
 	myfree((void *) s, M_STRING);
 }
 
+#ifdef MEMO_STRLEN
+/*
+ * Using the same mechanism as ref_count.h uses to hide Value ref counts,
+ * keep a memozied strlen in the storage with the string.
+ */
+#define memo_strlen(X)		((void)0, (((int *)(X))[-2]))
+#else
+#define memo_strlen(X)		strlen(X)
+
+#endif /* MEMO_STRLEN */
+
 #endif				/* Storage_h */
 
 /* 
  * $Log: storage.h,v $
- * Revision 1.5  2009/08/14 16:48:13  blacklite
- * add special handling for memory tracing when FAKE_FREE is on, basically emulate the sort of thing that valgrind et al do, don't free anything, and then abort if old, supposedly-freed memory gets used. also move checks to the front in ref_count.h macros so they happen -before- the actual pointer dereference, so we abort before a double free.
- *
- * Revision 1.4  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.6  2006/09/07 00:55:02  bjj
+ * Add new MEMO_STRLEN option which uses the refcounting mechanism to
+ * store strlen with strings.  This is basically free, since most string
+ * allocations are rounded up by malloc anyway.  This saves lots of cycles
+ * computing strlen.  (The change is originally from jitmoo, where I wanted
+ * inline range checks for string ops).
  *
  * Revision 1.5  1998/12/14 13:19:00  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
@@ -143,4 +150,14 @@ free_str(const char *s)
  *
  * Revision 1.1  1992/08/10  16:20:00  pjames
  * Initial RCS-controlled version
+ */
+
+/** Hellmoo changes:
+ * Revision 1.5  2009/08/14 16:48:13  blacklite
+ * add special handling for memory tracing when FAKE_FREE is on, basically emulate the sort of thing that valgrind et al do, don't free anything, and then abort if old, supposedly-freed memory gets used. also move checks to the front in ref_count.h macros so they happen -before- the actual pointer dereference, so we abort before a double free.
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
  */

@@ -303,18 +303,18 @@ db_object_bytes(Objid oid)
     Verbdef *v;
 
     count = sizeof(Object) + sizeof(Object *);
-    count += strlen(o->name) + 1;
+    count += memo_strlen(o->name) + 1;
 
     for (v = o->verbdefs; v; v = v->next) {
 	count += sizeof(Verbdef);
-	count += strlen(v->name) + 1;
+	count += memo_strlen(v->name) + 1;
 	if (v->program)
 	    count += program_bytes(v->program);
     }
 
     count += sizeof(Propdef) * o->propdefs.cur_length;
     for (i = 0; i < o->propdefs.cur_length; i++)
-	count += strlen(o->propdefs.l[i].name) + 1;
+	count += memo_strlen(o->propdefs.l[i].name) + 1;
 
     len = dbpriv_count_properties(oid);
     count += (sizeof(Pval) - sizeof(Var)) * len;
@@ -811,46 +811,16 @@ dbpriv_set_all_users(Var v)
     all_users = v;
 }
 
-char rcsid_db_objects[] = "$Id: db_objects.c,v 1.14 2010/05/17 01:49:02 blacklite Exp $";
+char rcsid_db_objects[] = "$Id: db_objects.c,v 1.5 2006/09/07 00:55:02 bjj Exp $";
 
 /* 
  * $Log: db_objects.c,v $
- * Revision 1.14  2010/05/17 01:49:02  blacklite
- * add bf_occupants
- *
- * Revision 1.13  2010/05/16 02:41:03  blacklite
- * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
- *
- * Revision 1.12  2009/10/11 18:31:33  blacklite
- * explictly return 0 for #-1 in is_in_a
- *
- * Revision 1.11  2009/09/29 20:53:02  blacklite
- * patch renumber() so it might work, not that anyone ever uses it; remove redundant lines from is_in_a.
- *
- * Revision 1.10  2009/07/27 01:45:54  blacklite
- * add is_in_a
- *
- * Revision 1.9  2009/07/26 20:01:46  blacklite
- * fix is_a and is_in for #-1 (no zen) :(
- *
- * Revision 1.8  2009/07/23 04:33:27  blacklite
- * fix typo in is_in()
- *
- * Revision 1.7  2009/07/22 23:14:23  blacklite
- * add internal is_a and is_in, and moo functions which pass to each.
- *
- * Revision 1.6  2008/08/23 21:30:14  blacklite
- * Fix LL_REMOVE and LL_APPEND and turn them into functions (add_to* and remove_from*.)
- *
- * Revision 1.5  2008/08/22 22:09:20  blacklite
- * Add lastchild and lastcontents to make linked lists both undumb and fast.
- * (As opposed to my insert-at-the-front hack which was fast but dumb.)
- *
- * Revision 1.4  2008/08/20 18:38:34  blacklite
- * Change linked list handling -- insert at front, not append at back.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.5  2006/09/07 00:55:02  bjj
+ * Add new MEMO_STRLEN option which uses the refcounting mechanism to
+ * store strlen with strings.  This is basically free, since most string
+ * allocations are rounded up by malloc anyway.  This saves lots of cycles
+ * computing strlen.  (The change is originally from jitmoo, where I wanted
+ * inline range checks for string ops).
  *
  * Revision 1.4  1998/12/14 13:17:36  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
@@ -895,3 +865,39 @@ char rcsid_db_objects[] = "$Id: db_objects.c,v 1.14 2010/05/17 01:49:02 blacklit
  * Initial revision
  */
 
+/* Hellmoo changes:
+ *
+ * Revision 1.14  2010/05/17 01:49:02  blacklite
+ * add bf_occupants
+ *
+ * Revision 1.13  2010/05/16 02:41:03  blacklite
+ * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
+ *
+ * Revision 1.12  2009/10/11 18:31:33  blacklite
+ * explictly return 0 for #-1 in is_in_a
+ *
+ * Revision 1.11  2009/09/29 20:53:02  blacklite
+ * patch renumber() so it might work, not that anyone ever uses it; remove redundant lines from is_in_a.
+ *
+ * Revision 1.10  2009/07/27 01:45:54  blacklite
+ * add is_in_a
+ *
+ * Revision 1.9  2009/07/26 20:01:46  blacklite
+ * fix is_a and is_in for #-1 (no zen) :(
+ *
+ * Revision 1.8  2009/07/23 04:33:27  blacklite
+ * fix typo in is_in()
+ *
+ * Revision 1.7  2009/07/22 23:14:23  blacklite
+ * add internal is_a and is_in, and moo functions which pass to each.
+ *
+ * Revision 1.6  2008/08/23 21:30:14  blacklite
+ * Fix LL_REMOVE and LL_APPEND and turn them into functions (add_to* and remove_from*.)
+ *
+ * Revision 1.5  2008/08/22 22:09:20  blacklite
+ * Add lastchild and lastcontents to make linked lists both undumb and fast.
+ * (As opposed to my insert-at-the-front hack which was fast but dumb.)
+ *
+ * Revision 1.4  2008/08/20 18:38:34  blacklite
+ * Change linked list handling -- insert at front, not append at back.
+ */

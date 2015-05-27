@@ -89,7 +89,11 @@ refcount_overhead(Memory_Type type)
 		/* for systems with picky double alignment */
 		return MAX(sizeof(int), sizeof(double));
 	case M_STRING:
-		return sizeof(int);
+		#ifdef MEMO_STRLEN
+			return sizeof(int) + sizeof(int);
+		#else
+			return sizeof(int);
+		#endif /* MEMO_STRLEN */
 	case M_LIST:
 	case M_HASH:
 		/* for systems with picky pointer alignment */
@@ -327,6 +331,10 @@ mymalloc(unsigned size, Memory_Type type)
 	if (offs) {
 		memptr += offs;
 		((int *) memptr)[-1] = 1;
+		#ifdef MEMO_STRLEN
+			if (type == M_STRING)
+			((int *) memptr)[-2] = size - 1;
+		#endif /* MEMO_STRLEN */
 	}
 
 	track_mem(memptr, type, size);
@@ -355,7 +363,7 @@ str_dup(const char *s)
 		addref(emptystring);
 		return emptystring;
 	} else {
-		r = (char *) mymalloc(strlen(s) + 1, M_STRING);
+		r = (char *) mymalloc(strlen(s) + 1, M_STRING);	/* NO MEMO HERE */
 		strcpy(r, s);
 	}
 	return r;
@@ -430,34 +438,18 @@ int set_live_trace(int live_trace_on)
 }
 #endif
 
-char rcsid_storage[] = "$Id: storage.c,v 1.9 2009/09/29 20:44:32 blacklite Exp $";
+char rcsid_storage[] = "$Id: storage.c,v 1.6 2006/09/07 00:55:02 bjj Exp $";
 
 /* 
  * $Log: storage.c,v $
- * Revision 1.9  2009/09/29 20:44:32  blacklite
- * Add new trackfree_mem null macro, and change an abort to panic.
+ * Revision 1.6  2006/09/07 00:55:02  bjj
+ * Add new MEMO_STRLEN option which uses the refcounting mechanism to
+ * store strlen with strings.  This is basically free, since most string
+ * allocations are rounded up by malloc anyway.  This saves lots of cycles
+ * computing strlen.  (The change is originally from jitmoo, where I wanted
+ * inline range checks for string ops).
  *
- * Revision 1.8  2009/08/14 21:34:10  blacklite
- * add new levels to live_trace (1, don't spam stderr; 2 spam stderr; 3 spam with backtraces and values)
- *
- * Revision 1.7  2009/08/14 16:48:13  blacklite
- * add special handling for memory tracing when FAKE_FREE is on, basically emulate the sort of thing that valgrind et al do, don't free anything, and then abort if old, supposedly-freed memory gets used. also move checks to the front in ref_count.h macros so they happen -before- the actual pointer dereference, so we abort before a double free.
- *
- * Revision 1.6  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.5	 2008/08/24 05:09:16  blacklite
- * add PADDED_LIST_ALLOC, but disable it by default, because it doesn't quite work yet. also remove the 'itemsize' from memory_usage since it is actually useless.
- *
- * Revision 1.4	 2008/08/22 22:10:04  blacklite
- * Make memory_usage() useful even when !USE_GNU_MALLOC.
- *
- * Revision 1.3	 2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
- *
- * Revision 1.5	 1998/12/14 13:18:59  nop
+ * Revision 1.5  1998/12/14 13:18:59  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
  *
  * Revision 1.4	 1997/07/07 03:24:55  nop
@@ -547,4 +539,30 @@ char rcsid_storage[] = "$Id: storage.c,v 1.9 2009/09/29 20:44:32 blacklite Exp $
  *
  * Revision 1.1	 1992/07/20	 23:23:12  pavel
  * Initial RCS-controlled version.
+ */
+
+/* Hellmoo changes:
+char rcsid_storage[] = "$Id: storage.c,v 1.9 2009/09/29 20:44:32 blacklite Exp $";
+
+/*
+ * $Log: storage.c,v $
+ * Revision 1.9  2009/09/29 20:44:32  blacklite
+ * Add new trackfree_mem null macro, and change an abort to panic.
+ *
+ * Revision 1.8  2009/08/14 21:34:10  blacklite
+ * add new levels to live_trace (1, don't spam stderr; 2 spam stderr; 3 spam with backtraces and values)
+ *
+ * Revision 1.7  2009/08/14 16:48:13  blacklite
+ * add special handling for memory tracing when FAKE_FREE is on, basically emulate the sort of thing that valgrind et al do, don't free anything, and then abort if old, supposedly-freed memory gets used. also move checks to the front in ref_count.h macros so they happen -before- the actual pointer dereference, so we abort before a double free.
+ *
+ * Revision 1.6  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.5	 2008/08/24 05:09:16  blacklite
+ * add PADDED_LIST_ALLOC, but disable it by default, because it doesn't quite work yet. also remove the 'itemsize' from memory_usage since it is actually useless.
+ *
+ * Revision 1.4	 2008/08/22 22:10:04  blacklite
+ * Make memory_usage() useful even when !USE_GNU_MALLOC.
  */
