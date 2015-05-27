@@ -22,7 +22,8 @@
 /* #define MEMORY_TRACE 1 */
 /* #define MEMORY_TRACE_TYPE M_LIST */
 
-#include "config.h"
+#include "my-string.h"
+
 #include "structures.h"
 #include "ref_count.h"
 
@@ -83,6 +84,9 @@ free_str(const char *s)
 
 /* 
  * $Log: storage.h,v $
+ * Revision 1.7  2006/12/06 23:44:56  wrog
+ * Fix compiler warnings about redefining strlen/strcmp
+ *
  * Revision 1.6  2006/09/07 00:55:02  bjj
  * Add new MEMO_STRLEN option which uses the refcounting mechanism to
  * store strlen with strings.  This is basically free, since most string
