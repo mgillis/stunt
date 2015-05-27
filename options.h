@@ -261,6 +261,19 @@
 #endif
 
 /******************************************************************************
+ * The server can merge duplicate strings on load to conserve memory.  This
+ * involves a rather expensive step at startup to dispose of the table used
+ * to find the duplicates.  This should be improved eventually, but you may
+ * want to trade off faster startup time for increased memory usage.
+ *
+ * You might want to turn this off if you see a large delay before the
+ * INTERN: lines in the log at startup.
+ ******************************************************************************
+ */
+
+#define STRING_INTERNING /* */
+
+/******************************************************************************
  * This package comes with a copy of the implementation of malloc() from GNU
  * Emacs.  This is a very nice and reasonably portable implementation, but some
  * systems, notably the NeXT machine, won't allow programs to provide their own
@@ -420,6 +433,9 @@
  *
  * Revision 1.3  2007/09/12 07:33:29  spunky
  * This is a working version of the current HellMOO server
+ *
+ * Revision 1.8  2001/01/29 09:08:40  bjj
+ * Made STRING_INTERNING optional via options.h.
  *
  * Revision 1.7  2000/01/11 02:05:27  nop
  * More doc tweaking, really warn about BYTECODE_REDUCE_REF.
