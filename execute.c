@@ -660,12 +660,49 @@ free_activation(activation a, char data_too)
 /** Set up another activation for calling a verb
   does not change the vm in case of any error **/
 
+enum error direct_call_verb(Objid this, const char *vname, Var THIS, Var args, int do_pass);
+
+/* call_verb in a legacy way, str_dups vname_in and sets up THIS==this. */
 enum error
-_call_verb(Objid this, const char *vname, Var THIS, Var args, int do_pass)
+call_verb(Objid this, const char *vname_in, Var args, int do_pass)
+{
+    enum error result;
+    if (vname_in[0] == WAIF_VERB_PREFIX) {
+ 		const char *vname = str_dup(vname_in + 1);
+    	result = direct_call_verb_without_this(this, vname, args, do_pass);
+   	    free_str(vname);
+    } else {
+    	const char *vname = str_dup(vname_in);
+    	result = direct_call_verb_without_this(this, vname, args, do_pass);
+   	    free_str(vname);
+    }
+
+    return result;
+}
+
+enum error
+direct_call_verb_without_this(Objid this, const char *vname, Var args, int do_pass)
+{
+	Var THIS;
+
+	THIS.type = TYPE_OBJ;
+	THIS.v.obj = this;
+
+	return direct_call_verb(this, vname, THIS, args, do_pass)
+}
+
+/*
+ * Historical interface for things which want to call with vname not
+ * already in a moo-str.
+ */
+enum error
+direct_call_verb(Objid this, const char *vname, Var THIS, Var args, int do_pass)
 {
     /* if call succeeds, args will be consumed.  If call fails, args
        will NOT be consumed  -- it must therefore be freed by caller */
     /* vname will never be consumed */
+    /* vname *must* already be a MOO-string (as in str_ref-able) */
+
     /* THIS will never be consumed */
 
     /* do_pass:
@@ -708,7 +745,6 @@ _call_verb(Objid this, const char *vname, Var THIS, Var args, int do_pass)
 	return E_MAXREC;
 
     program = db_verb_program(h);
-    vname = str_dup(vname);	/* ensure that vname is heap-allocated */
     RUN_ACTIV.prog = program_ref(program);
 
     RUN_ACTIV.this = this;
@@ -757,11 +793,9 @@ _call_verb(Objid this, const char *vname, Var THIS, Var args, int do_pass)
 #undef ENV_COPY
 
     v.type = TYPE_STR;
-     if (vname[0] == WAIF_VERB_PREFIX) {
- 	v.v.str = str_dup(vname + 1);
- 	free_str(vname);
-     } else
-	    v.v.str = vname;
+    /* use a ref, because str is already in the moo */
+    v.v.str = str_ref(vname);
+
     set_rt_env_var(env, SLOT_VERB, v);	/* no var_dup */
     set_rt_env_var(env, SLOT_ARGS, args);	/* no var_dup */
 
@@ -769,15 +803,7 @@ _call_verb(Objid this, const char *vname, Var THIS, Var args, int do_pass)
 
     return E_NONE;
 }
- enum error
- call_verb(Objid this, const char *vname, Var args, int do_pass)
- {
- 	Var THIS;
- 
- 	THIS.type = TYPE_OBJ;
- 	THIS.v.obj = this;
- 	return _call_verb(this, vname, THIS, args, do_pass);
- }
+
  
 static int
 rangeset_check(int end, int from, int to)
@@ -1805,8 +1831,9 @@ do {    						    	\
   		verb = POP();	/* verbname, should be string */
   		obj = POP();	/* objid, should be obj */
   
- 		if (verb.type != TYPE_STR || args.type != TYPE_LIST) {
- 			err = E_TYPE;
+		if (args.type != TYPE_LIST || verb.type != TYPE_STR
+		    || obj.type != TYPE_OBJ)
+		    err = E_TYPE;
  		} else if (obj.type == TYPE_WAIF) {
  			char *str = mymalloc(strlen(verb.v.str) + 2,M_STRING);
  
@@ -1827,7 +1854,7 @@ do {    						    	\
  
  		if (err == E_NONE) {
   		    STORE_STATE_VARIABLES();
- 		    err = _call_verb(class, verb.v.str, obj, args, 0);
+ 		    err = direct_call_verb(class, verb.v.str, obj, args, 0);
 		    /* if there is no error, RUN_ACTIV is now the CALLEE's.
 		       args will be consumed in the new rt_env */
 		    /* if there is an error, then RUN_ACTIV is unchanged, and
@@ -2956,7 +2983,8 @@ bf_cputime(Var arglist, Byte next, void *vdata, Objid progr)
 static package
 bf_pass(Var arglist, Byte next, void *vdata, Objid progr)
 {
-    enum error e = _call_verb(RUN_ACTIV.this, RUN_ACTIV.verb, RUN_ACTIV.THIS,
+	/* vname here is already a moo-str, so we can use direct_call_verb */
+    enum error e = direct_call_verb(RUN_ACTIV.this, RUN_ACTIV.verb, RUN_ACTIV.THIS,
 			arglist, 1);
 
     if (e == E_NONE)
@@ -3433,15 +3461,16 @@ read_activ(activation * a, int which_vector)
  * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
  * extra myrealloc() and memcpy() tricks for lists, Valgrind
  * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
  */
 
-char rcsid_execute[] = "$Id: execute.c,v 1.11 2001/03/12 03:25:16 bjj Exp $";
+char rcsid_execute[] = "$Id: execute.c,v 1.12 2001/03/12 05:10:54 bjj Exp $";
 
 /* 
  * $Log: execute.c,v $
+ * Revision 1.12  2001/03/12 05:10:54  bjj
+ * Split out call_verb and call_verb2.  The latter must only be called with
+ * strings that are already MOO strings (str_ref-able).
+ *
  * Revision 1.11  2001/03/12 03:25:16  bjj
  * Added new package type BI_KILL which kills the task calling the builtin.
  * Removed the static int task_killed in execute.c which wa tested on every

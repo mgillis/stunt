@@ -86,6 +86,12 @@ typedef enum {
    or E_NONE.  the vm will only be changed if E_NONE is returned */
 extern enum error call_verb(Objid obj, const char *vname, Var args,
 			    int do_pass);
+/* if your vname is already a moo str (via str_dup) then you can
+   use this interface instead */
+extern enum error direct_call_verb(Objid obj, const char *vname_in, Var THIS, Var args,
+			    int do_pass);
+extern enum error direct_call_verb_without_this(Objid, const char *vname_in, Var args,
+                int do_pass);
 
 extern int setup_activ_for_eval(Program * prog);
 
@@ -143,8 +149,12 @@ extern int read_activ(activation * a, int which_vector);
  * Revision 1.4  2009/03/27 20:26:49  blacklite
  * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
  *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ */
+
+/*
+ * Revision 1.5  2001/03/12 05:10:54  bjj
+ * Split out call_verb and call_verb2.  The latter must only be called with
+ * strings that are already MOO strings (str_ref-able).
  *
  * Revision 1.4  1998/12/14 13:17:51  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
