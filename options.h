@@ -228,8 +228,7 @@
  * and vice versa.  It is safe to flip this switch only if there are
  * no suspended tasks in the database you are loading.  (It might work
  * anyway, but hey, it's your database.)  This restriction will be
- * lifted in a future version of the server software.  Consider this
- * option as being BETA QUALITY until then.
+ * lifted in a future version of the server software.
  *
  * NOTE WELL    NOTE WELL    NOTE WELL    NOTE WELL    NOTE WELL    
  *
@@ -420,6 +419,7 @@
  * Revision 1.7  2000/01/11 02:05:27  nop
  * More doc tweaking, really warn about BYTECODE_REDUCE_REF.
  *
+
  * Revision 1.6  2000/01/09 22:20:15  nop
  * Round one of doc cleanup.
  *
