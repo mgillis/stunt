@@ -15,6 +15,26 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/* Hellmoo changes:
+ * Revision 1.10  2010/05/17 07:25:35  blacklite
+ * last fixes for 1.10.4
+ *
+ * Revision 1.9  2009/08/14 21:35:38  blacklite
+ * call #0:task_suspended whenever it happens.
+ *
+ * Revision 1.8  2009/07/26 21:57:42  blacklite
+ * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
+ * function and various supporting things. Which don't actually work without
+ * causing segfaults, but, hey, it's a start.
+ *
+ * Revision 1.7  2009/07/26 20:00:07  blacklite
+ * add NON_PLAYER_CONNECTIONS define
+ *
+ * Revision 1.6  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ ***************/
+
 #include "my-string.h"
 #include "my-time.h"
 
@@ -816,12 +836,16 @@ enqueue_ft(Program * program, activation a, Var * rt_env,
 
     t->kind = TASK_FORKED;
     t->t.forked.program = program;
-    /* The next line was not present before 1.8.2.  a.rt_env was never
-     * accessed and was eventually overwritten by forked.rt_env in
-     * do_forked_task().  Makes no sense to store it two places, but here
-     * we are.  Setting it in the activation simplifies forked_task_bytes()
+    /* The next two lines were not present before 1.8.2.  a.rt_env/prog
+     * were never accessed and were eventually overwritten by
+     * forked.rt_env/program in do_forked_task().  Makes no sense to store
+     * it two places, but here we are.
+     * Setting it in the activation simplifies forked_task_bytes()
      */
     a.rt_env = rt_env;
+    a.prog = program;
+    a.base_rt_stack = NULL;
+    a.top_rt_stack = NULL;
     t->t.forked.a = a;
     t->t.forked.rt_env = rt_env;
     t->t.forked.f_index = f_index;
@@ -1481,8 +1505,10 @@ activation_bytes(activation *ap)
     total += program_bytes(ap->prog);
     for (i = 0; i < ap->prog->num_var_names; ++i)
 	total += value_bytes(ap->rt_env[i]);
-    for (v = ap->top_rt_stack - 1; v >= ap->base_rt_stack; v--)
-	total += value_bytes(*v);
+    if (ap->top_rt_stack) {
+	for (v = ap->top_rt_stack - 1; v >= ap->base_rt_stack; v--)
+	    total += value_bytes(*v);
+    }
     /* XXX ignore bi_func_data, it's an opaque type. */
     total += value_bytes(ap->temp) - sizeof(Var);
     total += strlen(ap->verb) + 1;
@@ -2186,30 +2212,13 @@ register_tasks(void)
 #endif
 }
 
-/* Hellmoo changes:
- * Revision 1.10  2010/05/17 07:25:35  blacklite
- * last fixes for 1.10.4
- *
- * Revision 1.9  2009/08/14 21:35:38  blacklite
- * call #0:task_suspended whenever it happens.
- *
- * Revision 1.8  2009/07/26 21:57:42  blacklite
- * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
- * function and various supporting things. Which don't actually work without
- * causing segfaults, but, hey, it's a start.
- *
- * Revision 1.7  2009/07/26 20:00:07  blacklite
- * add NON_PLAYER_CONNECTIONS define
- *
- * Revision 1.6  2009/03/27 20:26:49  blacklite
- * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
- *
- ***************/
-
-char rcsid_tasks[] = "$Id: tasks.c,v 1.8 2001/07/27 23:06:20 bjj Exp $";
+char rcsid_tasks[] = "$Id: tasks.c,v 1.9 2001/07/31 06:33:22 bjj Exp $";
 
 /* 
  * $Log: tasks.c,v $
+ * Revision 1.9  2001/07/31 06:33:22  bjj
+ * Fixed some bugs in the reporting of forked task sizes.
+ *
  * Revision 1.8  2001/07/27 23:06:20  bjj
  * Run through indent, oops.
  *
