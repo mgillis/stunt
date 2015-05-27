@@ -15,6 +15,17 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/*
+ * Hellmoo changes:
+ * Revision 1.5  2009/03/27 20:26:48  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.4  2009/03/08 12:41:30  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ */
+
 #include <limits.h>
 
 #include "ast.h"
@@ -683,9 +694,6 @@ generate_expr(Expr * expr, State * state)
 		break;
 	    case EXPR_PROP:
 		op = OP_GET_PROP;
-		break;
-	    case EXPR_INDEX:
-		op = OP_REF;
 		break;
 	    default:
 		panic("Not a binary operator in GENERATE_EXPR()");
@@ -1371,20 +1379,12 @@ generate_code(Stmt * stmt, DB_Version version)
     return prog;
 }
 
-char rcsid_code_gen[] = "$Id: code_gen.c,v 1.5 2009/03/27 20:26:48 blacklite Exp $";
+char rcsid_code_gen[] = "$Id: code_gen.c,v 1.10 2002/08/23 13:00:18 bjj Exp $";
 
 /* 
  * $Log: code_gen.c,v $
- * Revision 1.5  2009/03/27 20:26:48  blacklite
- * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
- *
- * Revision 1.4  2009/03/08 12:41:30  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.10  2002/08/23 13:00:18  bjj
+ * Removed a spurious EXPR_INDEX case left over from before x[$]
  *
  * Revision 1.9  1999/08/14 19:44:15  bjj
  * Code generator will no longer PUSH_CLEAR things like dobj/dobjstr/prepstr
