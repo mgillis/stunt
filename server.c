@@ -15,6 +15,36 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/*
+ * Hellmoo changes:
+ * Revision 1.11  2010/05/17 01:52:27  blacklite
+ * add set_profiler_filename
+ *
+ * Revision 1.10  2009/07/27 01:46:57  blacklite
+ * typo
+ *
+ * Revision 1.9  2009/07/26 21:57:42  blacklite
+ * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
+ * function and various supporting things. Which don't actually work without
+ * causing segfaults, but, hey, it's a start.
+ *
+ * Revision 1.8  2009/07/25 03:21:59  blacklite
+ * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
+ * (specify with -p). I may still be missing some spots but this seems to give
+ * usable info right now.
+ *
+ * Revision 1.7  2009/07/23 04:22:37  blacklite
+ * added is_connected function.
+ *
+ * Revision 1.6  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.5  2008/08/24 05:06:13  blacklite
+ * Add -r option and more fixes to the recovery process.
+ */
+
 #include <errno.h>
 
 #include "my-types.h"		/* must be first on some systems */
@@ -973,8 +1003,16 @@ server_new_connection(server_listener sl, network_handle nh, int outbound)
     h->binary = 0;
     h->print_messages = (!outbound && l->print_messages);
 
-    if (!outbound)
+    if (!outbound) {
 	new_input_task(h->tasks, "");
+	/*
+	 * Suspend input at the network level until the above input task
+	 * is processed.  At the point when it is dequeued, tasks.c will
+	 * notice that the queued input size is below the low water mark
+	 * and resume input.
+	 */
+	task_suspend_input(h->tasks);
+    }
 
     oklog("%s: #%d on %s\n",
 	  outbound ? "CONNECT" : "ACCEPT",
@@ -1881,39 +1919,12 @@ register_server(void)
 #endif
 }
 
-char rcsid_server[] = "$Id: server.c,v 1.11 2010/05/17 01:52:27 blacklite Exp $";
+char rcsid_server[] = "$Id: server.c,v 1.6 2003/06/12 18:16:56 bjj Exp $";
 
 /* 
  * $Log: server.c,v $
- * Revision 1.11  2010/05/17 01:52:27  blacklite
- * add set_profiler_filename
- *
- * Revision 1.10  2009/07/27 01:46:57  blacklite
- * typo
- *
- * Revision 1.9  2009/07/26 21:57:42  blacklite
- * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
- * function and various supporting things. Which don't actually work without
- * causing segfaults, but, hey, it's a start.
- *
- * Revision 1.8  2009/07/25 03:21:59  blacklite
- * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
- * (specify with -p). I may still be missing some spots but this seems to give
- * usable info right now.
- *
- * Revision 1.7  2009/07/23 04:22:37  blacklite
- * added is_connected function.
- *
- * Revision 1.6  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.5  2008/08/24 05:06:13  blacklite
- * Add -r option and more fixes to the recovery process.
- *
- * Revision 1.4  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.6  2003/06/12 18:16:56  bjj
+ * Suspend input on connection until :do_login_command() can run.
  *
  * Revision 1.5  1998/12/29 06:56:32  nop
  * Fixed leak in onc().

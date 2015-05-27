@@ -769,6 +769,17 @@ enqueue_input_task(tqueue * tq, const char *input, int at_front)
     }
 }
 
+void
+task_suspend_input(task_queue q)
+{
+    tqueue *tq = q.ptr;
+
+    if (!tq->input_suspended && tq->connected) {
+	server_suspend_input(tq->player);
+	tq->input_suspended = 1;
+    }
+}
+
 static void
 flush_input(tqueue * tq, int show_messages)
 {
@@ -2212,10 +2223,13 @@ register_tasks(void)
 #endif
 }
 
-char rcsid_tasks[] = "$Id: tasks.c,v 1.10 2002/09/15 23:21:01 xplat Exp $";
+char rcsid_tasks[] = "$Id: tasks.c,v 1.11 2003/06/12 18:16:56 bjj Exp $";
 
 /* 
  * $Log: tasks.c,v $
+ * Revision 1.11  2003/06/12 18:16:56  bjj
+ * Suspend input on connection until :do_login_command() can run.
+ *
  * Revision 1.10  2002/09/15 23:21:01  xplat
  * GNU indent normalization.
  *

@@ -15,6 +15,14 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/* Hellmoo changes:
+ * Revision 1.5  2009/08/14 21:35:38  blacklite
+ * call #0:task_suspended whenever it happens.
+ *
+ * Revision 1.4  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ */
+
 #ifndef Tasks_H
 #define Tasks_H 1
 
@@ -36,6 +44,7 @@ extern int tasks_set_connection_option(task_queue, const char *,
 				       Var);
 
 extern void new_input_task(task_queue, const char *);
+extern void task_suspend_input(task_queue);
 extern enum error enqueue_forked_task2(activation a, int f_index,
 			       double after_seconds, int vid);
 
@@ -105,16 +114,9 @@ extern db_verb_handle find_verb_for_programming(Objid player,
 
 #endif				/* !Tasks_H */
 
-/* 
- * $Log: tasks.h,v $
- * Revision 1.5  2009/08/14 21:35:38  blacklite
- * call #0:task_suspended whenever it happens.
- *
- * Revision 1.4  2009/03/27 20:26:49  blacklite
- * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+/*
+ * Revision 1.4  2003/06/12 18:16:57  bjj
+ * Suspend input on connection until :do_login_command() can run.
  *
  * Revision 1.3  1998/12/14 13:19:08  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
