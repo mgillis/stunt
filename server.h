@@ -203,7 +203,7 @@ enum Server_Option {
 
 # undef _SVO_DEF
 
-    SVO__CACHE_SIZE
+    SVO__CACHE_SIZE   /* end marker, not an option */
 };
 
 /*
@@ -319,6 +319,9 @@ FILE  *Dev_Random;  /* Global file pointer for /dev/random */
 
 /* 
  * $Log: server.h,v $
+ * Revision 1.7  2010/04/22 21:46:58  wrog
+ * Comment tweaks
+ *
  * Revision 1.6  2010/03/30 22:59:57  wrog
  * server_flag_option() now takes a default value;
  * Minimum values on max_string_concat/max_list_concat enforced;
