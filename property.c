@@ -93,7 +93,7 @@ bf_prop_info(Var arglist, Byte next, void *vdata, Objid progr)
     db_prop_handle h;
     Var r;
     unsigned flags;
-    char *s;
+    char perms[4], *s;
 
     if (!valid(oid)) {
 	free_var(arglist);
@@ -111,7 +111,7 @@ bf_prop_info(Var arglist, Byte next, void *vdata, Objid progr)
     r.v.list[1].type = TYPE_OBJ;
     r.v.list[1].v.obj = db_property_owner(h);
     r.v.list[2].type = TYPE_STR;
-    r.v.list[2].v.str = s = str_dup("xxx");
+    s = perms;
     flags = db_property_flags(h);
     if (flags & PF_READ)
 	*s++ = 'r';
@@ -122,6 +122,7 @@ bf_prop_info(Var arglist, Byte next, void *vdata, Objid progr)
     if (flags & PF_PRIVATE)
 	*s++ = 'p';
     *s = '\0';
+    r.v.list[2].v.str = str_dup(perms);
 
     return make_var_pack(r);
 }
@@ -361,18 +362,13 @@ register_property(void)
 			     TYPE_OBJ, TYPE_STR);
 }
 
-char rcsid_property[] = "$Id: property.c,v 1.5 2009/07/25 03:11:19 blacklite Exp $";
+char rcsid_property[] = "$Id: property.c,v 1.4 2008/08/20 04:25:23 bjj Exp $";
 
 /* 
  * $Log: property.c,v $
- * Revision 1.5  2009/07/25 03:11:19  blacklite
- * add bf_has_callable_verb and bf_has_property
- *
- * Revision 1.4  2009/03/27 20:24:37  blacklite
- * add PF_PRIVATE flag to props
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.4  2008/08/20 04:25:23  bjj
+ * Fix iffy usage of str_dup in verb_info() and property_info() which could
+ * cause poor behavior with MEMO_STRLEN (and other future string optimizations)
  *
  * Revision 1.3  1998/12/14 13:18:50  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
@@ -440,3 +436,14 @@ char rcsid_property[] = "$Id: property.c,v 1.5 2009/07/25 03:11:19 blacklite Exp
  * Revision 1.1  1992/07/20  23:23:12  pavel
  * Initial RCS-controlled version.
  */
+
+/** Hellmoo changes:
+/*
+ * $Log: property.c,v $
+ * Revision 1.5  2009/07/25 03:11:19  blacklite
+ * add bf_has_callable_verb and bf_has_property
+ *
+ * Revision 1.4  2009/03/27 20:24:37  blacklite
+ * add PF_PRIVATE flag to props
+ */
+ 
