@@ -58,6 +58,11 @@ typedef enum {
 				 * bug handling in read_bi_func_data().
 				 */
     DBV_Hash,			/* Addition of `HASH' variables. */
+    DBV_NextGen,		/* NOTE NOTE XXX this is 6 in hellmoo branch and 5 in stunt master
+    		                 * Introduced the next-generation database
+				 * format which fixes the data locality
+				 * problems in the v4 format.
+				 */
     Num_DB_Versions		/* Special: the current version is this - 1. */
 } DB_Version;
 
