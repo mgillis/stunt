@@ -15,6 +15,60 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/*
+ * Hellmoo changes:
+ * $Log: execute.c,v $
+ * Revision 1.19  2010/05/17 07:25:35  blacklite
+ * last fixes for 1.10.4
+ *
+ * Revision 1.18  2010/05/17 05:52:47  blacklite
+ * cputime tweaks
+ *
+ * Revision 1.17  2010/05/17 04:26:05  blacklite
+ * add bf_cputime for reals
+ *
+ * Revision 1.16  2009/10/11 00:31:35  blacklite
+ * rewrite OP_FOR_LIST for paranoia/sanity reasons -- should be functionally equivalent, but whatever, this is the copy that works
+ *
+ * Revision 1.14  2009/08/14 21:35:38  blacklite
+ * call #0:task_suspended whenever it happens.
+ *
+ * Revision 1.13  2009/08/14 16:38:03  blacklite
+ * fix horrible has bugs! use the return value from hashset! i am dumb!
+ *
+ * Revision 1.12  2009/07/27 01:47:21  blacklite
+ * move from a preproc define for profiling to set_live_profiling().
+ *
+ * Revision 1.11  2009/07/26 20:00:56  blacklite
+ * add optional 4th arg for 'this' to call_verb
+ *
+ * Revision 1.10  2009/07/25 04:36:58  blacklite
+ * remove debug oklogs from testing bf_call_verb
+ *
+ * Revision 1.9  2009/07/25 04:20:57  blacklite
+ * drop bf_transparent_pass in favour of the new bf_call_verb, which calls
+ * a verb elsewhere while preserving the value of 'this'.
+ *
+ * Revision 1.8  2009/07/25 03:23:18  blacklite
+ * cut out unused profile helper funcs when !PROFILE_VERBS
+ *
+ * Revision 1.7  2009/07/25 03:21:59  blacklite
+ * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
+ * (specify with -p). I may still be missing some spots but this seems to give
+ * usable info right now.
+ *
+ * Revision 1.6  2009/07/23 00:49:36  blacklite
+ * add transparent_pass, minor tweaks to yield (probably didn't fix anything..)
+ *
+ * Revision 1.5  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ */
+
 #include "my-string.h"
 #include "my-time.h"
 
@@ -365,8 +419,8 @@ unwind_stack(Finally_Reason why, Var value, enum outcome *outcome)
 	    bi_func_data = a->bi_func_data;
 	}
 	player = a->player;
-        saved_cputime = a->cputime;
-	free_activation(*a, 0);	/* 0 == don't free bi_func_data */
+    saved_cputime = a->cputime;
+	free_activation(a, 0);	/* 0 == don't free bi_func_data */
 
 	if (top_activ_stack == 0) {	/* done */
 	    if (outcome)
@@ -447,7 +501,7 @@ unwind_stack(Finally_Reason why, Var value, enum outcome *outcome)
 		    case BI_KILL:
 			break;
 		    case BI_CALL:
-			free_activation(activ_stack[top_activ_stack--], 0);
+			free_activation(&activ_stack[top_activ_stack--], 0);
 			bi_func_pc = p.u.call.pc;
 			bi_func_data = p.u.call.data;
 			break;
@@ -635,24 +689,24 @@ push_activation(void)
 }
 
 void
-free_activation(activation a, char data_too)
+free_activation(activation *ap, char data_too)
 {
     Var *i;
 
-    free_rt_env(a.rt_env, a.prog->num_var_names);
+    free_rt_env(ap->rt_env, ap->prog->num_var_names);
 
-    for (i = a.base_rt_stack; i < a.top_rt_stack; i++)
+    for (i = ap->base_rt_stack; i < ap->top_rt_stack; i++)
 	free_var(*i);
-    free_rt_stack(&a);
-    free_var(a.THIS);
-    free_var(a.temp);
-    free_str(a.verb);
-    free_str(a.verbname);
+    free_rt_stack(ap);
+    free_var(ap->THIS);
+    free_var(ap->temp);
+    free_str(ap->verb);
+    free_str(ap->verbname);
 
-    free_program(a.prog);
+    free_program(ap->prog);
 
-    if (data_too && a.bi_func_pc && a.bi_func_data)
-	free_data(a.bi_func_data);
+    if (data_too && ap->bi_func_pc && ap->bi_func_data)
+	free_data(ap->bi_func_data);
     /* else bi_func_state will be later freed by bi_function */
 }
 
@@ -3410,63 +3464,14 @@ read_activ(activation * a, int which_vector)
 }
 
 
-/*
- * $Log: execute.c,v $
- * Revision 1.19  2010/05/17 07:25:35  blacklite
- * last fixes for 1.10.4
- *
- * Revision 1.18  2010/05/17 05:52:47  blacklite
- * cputime tweaks
- *
- * Revision 1.17  2010/05/17 04:26:05  blacklite
- * add bf_cputime for reals
- *
- * Revision 1.16  2009/10/11 00:31:35  blacklite
- * rewrite OP_FOR_LIST for paranoia/sanity reasons -- should be functionally equivalent, but whatever, this is the copy that works
- *
- * Revision 1.14  2009/08/14 21:35:38  blacklite
- * call #0:task_suspended whenever it happens.
- *
- * Revision 1.13  2009/08/14 16:38:03  blacklite
- * fix horrible has bugs! use the return value from hashset! i am dumb!
- *
- * Revision 1.12  2009/07/27 01:47:21  blacklite
- * move from a preproc define for profiling to set_live_profiling().
- *
- * Revision 1.11  2009/07/26 20:00:56  blacklite
- * add optional 4th arg for 'this' to call_verb
- *
- * Revision 1.10  2009/07/25 04:36:58  blacklite
- * remove debug oklogs from testing bf_call_verb
- *
- * Revision 1.9  2009/07/25 04:20:57  blacklite
- * drop bf_transparent_pass in favour of the new bf_call_verb, which calls
- * a verb elsewhere while preserving the value of 'this'.
- *
- * Revision 1.8  2009/07/25 03:23:18  blacklite
- * cut out unused profile helper funcs when !PROFILE_VERBS
- *
- * Revision 1.7  2009/07/25 03:21:59  blacklite
- * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
- * (specify with -p). I may still be missing some spots but this seems to give
- * usable info right now.
- *
- * Revision 1.6  2009/07/23 00:49:36  blacklite
- * add transparent_pass, minor tweaks to yield (probably didn't fix anything..)
- *
- * Revision 1.5  2009/03/27 20:26:49  blacklite
- * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
- *
- * Revision 1.4  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- */
-
-char rcsid_execute[] = "$Id: execute.c,v 1.12 2001/03/12 05:10:54 bjj Exp $";
+char rcsid_execute[] = "$Id: execute.c,v 1.13 2002/08/18 09:47:26 bjj Exp $";
 
 /* 
  * $Log: execute.c,v $
+ * Revision 1.13  2002/08/18 09:47:26  bjj
+ * Finally made free_activation() take a pointer after noticing how !$%^&
+ * much time it was taking in a particular profiling run.
+ *
  * Revision 1.12  2001/03/12 05:10:54  bjj
  * Split out call_verb and call_verb2.  The latter must only be called with
  * strings that are already MOO strings (str_ref-able).

@@ -15,6 +15,16 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/*
+ * Hellmoo changes:
+ * Revision 1.5  2010/05/17 04:26:05  blacklite
+ * add bf_cputime for reals
+ *
+ * Revision 1.4  2009/03/27 20:26:49  blacklite
+ * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
+ *
+ */
+
 #ifndef Execute_h
 #define Execute_h 1
 
@@ -60,7 +70,7 @@ typedef struct {
     int cputime;
 } activation;
 
-extern void free_activation(activation a, char data_too);
+extern void free_activation(activation *, char data_too);
 
 typedef struct {
     int task_id;
@@ -141,17 +151,12 @@ extern int read_activ(activation * a, int which_vector);
 
 #endif
 
-/* 
- * $Log: execute.h,v $
- * Revision 1.5  2010/05/17 04:26:05  blacklite
- * add bf_cputime for reals
- *
- * Revision 1.4  2009/03/27 20:26:49  blacklite
- * add optional argument to YIELD statement, make no-arg version into YIELD0 expression/op. add newer ops/exprs to disassembly. handle PF_PRIVATE in execute. make some vars 'register' in execute.
- *
- */
 
 /*
+ * Revision 1.6  2002/08/18 09:47:26  bjj
+ * Finally made free_activation() take a pointer after noticing how !$%^&
+ * much time it was taking in a particular profiling run.
+ *
  * Revision 1.5  2001/03/12 05:10:54  bjj
  * Split out call_verb and call_verb2.  The latter must only be called with
  * strings that are already MOO strings (str_ref-able).
