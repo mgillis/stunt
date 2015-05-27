@@ -41,7 +41,7 @@
 #include "version.h"
 
 const char *FUP_version = "1.9";
-const char *server_version = "1.10.4";
+const char *server_version = "1.8.1";
 
 int
 check_version(DB_Version version)
@@ -49,4 +49,4 @@ check_version(DB_Version version)
     return version < Num_DB_Versions;
 }
 
-char rcsid_version[] = "$Id: version.c,v 1.11 2010/05/16 02:41:03 blacklite Exp $";
+char rcsid_version[] = "$Id: version.c,v 1.10 2000/01/11 02:15:09 nop Exp $";
