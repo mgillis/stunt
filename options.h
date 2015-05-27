@@ -180,7 +180,7 @@
 #define OUTBOUND_NETWORK 1
 
 /* disable by default, +O enables: */
-/* #define OUTBOUND_NETWORK 0 */
+#define OUTBOUND_NETWORK 0
 
 /* enable by default, -O disables: */
 /* #define OUTBOUND_NETWORK 1 */
@@ -230,14 +230,16 @@
 #define PATTERN_CACHE_SIZE	20
 
 /******************************************************************************
- * If you don't plan on using protecting built-in properties (like
- * .name and .location), define IGNORE_PROP_PROTECTED.  The extra
- * property lookups on every reference to a built-in property are
- * expensive.
+ * Prior to 1.8.4 property lookups were required on every reference to a
+ * built-in property due to the possibility of that property being protected.
+ * This was expensive and IGNORE_PROP_PROTECTED existed to permanently
+ * disable the use of $server_options.protect_<property> for those who
+ * did not actually make use of protected builtin properties.  Since the
+ * protect_<property> options are now cached, this switch is now deprecated.
  ****************************************************************************** 
  */
 
-#define IGNORE_PROP_PROTECTED
+/* #define IGNORE_PROP_PROTECTED */
 
 /******************************************************************************
  * The code generator can now recognize situations where the code will not
@@ -333,7 +335,6 @@
 
 /* #define USE_GNU_MALLOC */
 
-
 /******************
  * PROFILING      *
  *  when any of the following defines are true, profile data is dumped to
@@ -365,6 +366,26 @@
  * Compile in mysql support.
  */
 /* #define MOOMYSQL */
+
+/******************************************************************************
+ * DEFAULT_MAX_LIST_CONCAT, if set to a postive value, is the length of the
+ * largest list constructible via splicing and subrange assignment.
+ * This is overriden by $server_options.max_list_concat if that is defined.
+ * DEFAULT_MAX_STRING_CONCAT, if set to a postive value, is the length of the
+ * largest string constructible via concatenation and subrange assignment
+ * This is overriden by $server_options.max_string_concat if that is defined.
+ * In either case, specifying a zero or negative limit disables this checking.
+ * 
+ * $server_options.max_concat_catchable, if defined, causes an E_QUOTA error
+ * to be raised when an overly-large value is spotted.  Otherwise, the task
+ * is aborted as if it ran out of seconds (see DEFAULT_FG/BG_SECONDS),
+ * which was the original behavior in this situation (i.e., if we were lucky
+ * enough to avoid the server panicking due to memory allocation failure).
+ ******************************************************************************
+ */
+
+#define DEFAULT_MAX_LIST_CONCAT   16777216
+#define DEFAULT_MAX_STRING_CONCAT 16777216
 
 
 /*****************************************************************************
@@ -458,6 +479,9 @@
 
 /* 
  * $Log: options.h,v $
+ * Revision 1.12  2010/03/26 23:51:42  wrog
+ * New server options max_*_concat and max_concat_catchable
+ *
  * Revision 1.11  2006/12/06 23:57:51  wrog
  * New INPUT_APPLY_BACKSPACE option to process backspace/delete characters on nonbinary connections (patch 1571939)
  *
