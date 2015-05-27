@@ -15,6 +15,26 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/* Hellmoo changes:
+ * Revision 1.9  2010/05/17 01:49:02  blacklite
+ * add bf_occupants
+ *
+ * Revision 1.8  2010/05/16 02:41:03  blacklite
+ * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
+ *
+ * Revision 1.7  2009/07/27 01:45:54  blacklite
+ * add is_in_a
+ *
+ * Revision 1.6  2009/07/22 23:14:23  blacklite
+ * add internal is_a and is_in, and moo functions which pass to each.
+ *
+ * Revision 1.5  2009/03/27 20:24:37  blacklite
+ * add PF_PRIVATE flag to props
+ *
+ * Revision 1.4  2008/08/24 05:06:13  blacklite
+ * Add -r option and more fixes to the recovery process.
+ */
+
 #ifndef DB_h
 #define DB_h 1
 
@@ -177,8 +197,29 @@ extern void db_object_occupants(Objid oid_what, Objid oid_parent, Var* v);
  *       old objects around that still have that flag set.
  */
 typedef enum {
-    FLAG_USER, FLAG_PROGRAMMER, FLAG_WIZARD, FLAG_OBSOLETE_1,
-    FLAG_READ, FLAG_WRITE, FLAG_OBSOLETE_2, FLAG_FERTILE
+    /* Permanent flags */
+    FLAG_USER,
+    FLAG_PROGRAMMER,
+    FLAG_WIZARD,
+    FLAG_OBSOLETE_1,
+    FLAG_READ,
+    FLAG_WRITE,
+    FLAG_OBSOLETE_2,
+    FLAG_FERTILE,
+    /* NOTE: New permanent flags must always be added here, rather
+     *	     than replacing one of the obsolete ones, since old
+     *	     databases might have old objects around that still have
+     *	     that flag set.
+     */
+
+    /* Temporary flags.
+     * (not saved; can be renumbered with impunity)
+     * make sure FLAG_FIRST_TEMP > last permanent flag
+     */
+    FLAG_FIRST_TEMP = 14,
+    /* allows space for the 2 needed by validate_hierarchies(),
+     * just in case int is only 16 bits
+     */
 } db_object_flag;
 
 extern int db_object_has_flag(Objid, db_object_flag);
@@ -533,27 +574,12 @@ extern void db_delete_verb(db_verb_handle);
 
 /* 
  * $Log: db.h,v $
- * Revision 1.9  2010/05/17 01:49:02  blacklite
- * add bf_occupants
+ * Revision 1.5  2004/05/22 01:25:43  wrog
+ * merging in WROGUE changes (W_SRCIP, W_STARTUP, W_OOB)
  *
- * Revision 1.8  2010/05/16 02:41:03  blacklite
- * Add new first/last_in, first/last_contents builtins and remove outdated TOMB constant. v1.10.4
+ * Revision 1.4.10.1  2003/06/03 12:18:00  wrog
+ * allow temporary flags on objects
  *
- * Revision 1.7  2009/07/27 01:45:54  blacklite
- * add is_in_a
- *
- * Revision 1.6  2009/07/22 23:14:23  blacklite
- * add internal is_a and is_in, and moo functions which pass to each.
- *
- * Revision 1.5  2009/03/27 20:24:37  blacklite
- * add PF_PRIVATE flag to props
- *
- * Revision 1.4  2008/08/24 05:06:13  blacklite
- * Add -r option and more fixes to the recovery process.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
-
  * Revision 1.4  2001/01/29 08:38:44  bjj
  * Fix Sourceforge Bug #127620: add_verb() should return verbindex
  * And now it does.  Old servers always returned 0, new servers will always

@@ -53,6 +53,17 @@
 #define OUT_OF_BAND_PREFIX "#$#"
 
 /******************************************************************************
+ * If OUT_OF_BAND_QUOTE_PREFIX is defined as a non-empty string, then any
+ * lines of input from any player that begin with that prefix will be
+ * stripped of that prefix and processed normally (whether to be parsed a
+ * command or given to a pending read()ing task), even if the resulting line
+ * begins with OUT_OF_BAND_PREFIX.  This provides a means of quoting lines
+ * that would otherwise spawn #0:do_out_of_band_command tasks
+ */
+
+#define OUT_OF_BAND_QUOTE_PREFIX "#$\""
+
+/******************************************************************************
  * The following constants define the execution limits placed on all MOO tasks.
  *
  * DEFAULT_MAX_STACK_DEPTH is the default maximum depth allowed for the MOO
@@ -147,19 +158,32 @@
 /* #define MPLEX_STYLE MP_POLL */
 
 /******************************************************************************
- * Define OUTBOUND_NETWORK to enable the built-in MOO function
- * open_network_connection(), which allows (only) wizard-owned MOO code to make
- * outbound network connections from the server.
+ * The built-in MOO function open_network_connection(), when enabled,
+ * allows (only) wizard-owned MOO code to make outbound network connections
+ * from the server.  When disabled, it raises E_PERM whenever called.
+ *
+ * The +O and -O command line options can explicitly enable and disable this
+ * function.  If neither option is supplied, the definition given to
+ * OUTBOUND_NETWORK here determines the default behavior
+ * (use 0 to disable by default, 1 or blank to enable by default).
+ * 
+ * If OUTBOUND_NETWORK is not defined at all,
+ * open_network_connection() is permanently disabled and +O is ignored.
+ *
  * *** THINK VERY HARD BEFORE ENABLING THIS FUNCTION ***
- * In some contexts, this could represent a serious breach of security.  By
- * default, the open_network_connection() function is disabled, always raising
- * E_PERM when called.
+ * In some contexts, this could represent a serious breach of security.  
  *
  * Note: OUTBOUND_NETWORK may not be defined if NETWORK_PROTOCOL is either
  *	 NP_SINGLE or NP_LOCAL.
  */
 
-#define OUTBOUND_NETWORK
+#define OUTBOUND_NETWORK 1
+
+/* disable by default, +O enables: */
+/* #define OUTBOUND_NETWORK 0 */
+
+/* enable by default, -O disables: */
+/* #define OUTBOUND_NETWORK 1 */
 
 /******************************************************************************
  * The following constants define certain aspects of the server's network
@@ -334,6 +358,9 @@
 #ifndef OUT_OF_BAND_PREFIX
 #define OUT_OF_BAND_PREFIX ""
 #endif
+#ifndef OUT_OF_BAND_QUOTE_PREFIX
+#define OUT_OF_BAND_QUOTE_PREFIX ""
+#endif
 
 #if PATTERN_CACHE_SIZE < 1
 #  error Illegal match() pattern cache size!
@@ -388,6 +415,14 @@
 #  error You cannot define "OUTBOUND_NETWORK" with that "NETWORK_PROTOCOL"
 #endif
 
+/* make sure OUTBOUND_NETWORK has a value;
+   for backward compatibility, use 1 if none given */
+#if defined(OUTBOUND_NETWORK) && (( 0 * OUTBOUND_NETWORK - 1 ) == 0)
+#undef OUTBOUND_NETWORK
+#define OUTBOUND_NETWORK 1
+#endif
+
+
 #if NETWORK_PROTOCOL != NP_LOCAL && NETWORK_PROTOCOL != NP_SINGLE && NETWORK_PROTOCOL != NP_TCP
 #  error Illegal value for "NETWORK_PROTOCOL"
 #endif
@@ -407,32 +442,17 @@
 
 /* 
  * $Log: options.h,v $
- * Revision 1.9  2010/05/16 02:39:23  blacklite
- * Break out some IPC stuff into pipe_utils.c, add var serialization, and some unfinished mysql stuff
+ * Revision 1.9  2004/05/22 01:25:44  wrog
+ * merging in WROGUE changes (W_SRCIP, W_STARTUP, W_OOB)
  *
- * Revision 1.8  2009/07/26 21:57:42  blacklite
- * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
- * function and various supporting things. Which don't actually work without
- * causing segfaults, but, hey, it's a start.
+ * Revision 1.8.10.3  2004/05/21 00:02:59  wrog
+ * allow for OUT_OF_BAND_QUOTE_PREFIX being undefined
  *
- * Revision 1.7  2009/07/26 20:00:07  blacklite
- * add NON_PLAYER_CONNECTIONS define
+ * Revision 1.8.10.2  2003/06/11 10:36:45  wrog
+ * added OUT_OF_BAND_QUOTE_PREFIX
  *
- * Revision 1.6  2009/07/25 03:21:59  blacklite
- * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
- * (specify with -p). I may still be missing some spots but this seems to give
- * usable info right now.
- *
- * Revision 1.5  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
- *
- * Revision 1.4  2008/08/24 05:09:16  blacklite
- * add PADDED_LIST_ALLOC, but disable it by default, because it doesn't quite work yet. also remove the 'itemsize' from memory_usage since it is actually useless.
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.8.10.1  2003/06/01 12:42:30  wrog
+ * added cmdline options -a (source address) +O/-O (enable/disable outbound network)
  *
  * Revision 1.8  2001/01/29 09:08:40  bjj
  * Made STRING_INTERNING optional via options.h.
@@ -528,4 +548,30 @@
  *
  * Revision 1.1  1992/07/20  23:23:12  pavel
  * Initial RCS-controlled version.
+ */
+
+/* Hellmoo changes:
+ * Revision 1.9  2010/05/16 02:39:23  blacklite
+ * Break out some IPC stuff into pipe_utils.c, add var serialization, and some unfinished mysql stuff
+ *
+ * Revision 1.8  2009/07/26 21:57:42  blacklite
+ * CONNECTION_TRANSFERS define, disabled though. Plus the bf_transfer_connection
+ * function and various supporting things. Which don't actually work without
+ * causing segfaults, but, hey, it's a start.
+ *
+ * Revision 1.7  2009/07/26 20:00:07  blacklite
+ * add NON_PLAYER_CONNECTIONS define
+ *
+ * Revision 1.6  2009/07/25 03:21:59  blacklite
+ * add profiling when PROFILE_VERBS is defined, spits info out to a profile log
+ * (specify with -p). I may still be missing some spots but this seems to give
+ * usable info right now.
+ *
+ * Revision 1.5  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.4  2008/08/24 05:09:16  blacklite
+ * add PADDED_LIST_ALLOC, but disable it by default, because it doesn't quite work yet. also remove the 'itemsize' from memory_usage since it is actually useless.
  */

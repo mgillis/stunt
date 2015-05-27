@@ -15,6 +15,29 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/* Hellmoo changes:
+ * Revision 1.8  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ *
+ * Revision 1.7  2008/08/24 07:57:05  blacklite
+ * massive speedup to rebuild, which in itself demonstrates how great it is
+ * to have a lastcontents/lastchild pointer. rebuild phase 2 now takes <1 sec,
+ * down from ~18 minutes. :o
+ *
+ * Revision 1.6  2008/08/24 05:06:13  blacklite
+ * Add -r option and more fixes to the recovery process.
+ *
+ * Revision 1.5  2008/08/23 21:30:31  blacklite
+ * Add emergency rebuild phase
+ *
+ * Revision 1.4  2008/08/22 22:09:20  blacklite
+ * Add lastchild and lastcontents to make linked lists both undumb and fast.
+ * (As opposed to my insert-at-the-front hack which was fast but dumb.)
+ *
+ */
+
 /*****************************************************************************
  * Routines for initializing, loading, dumping, and shutting down the database
  *****************************************************************************/
@@ -226,24 +249,22 @@ write_object(Objid oid)
 static int
 validate_hierarchies()
 {
-    Objid oid, log_oid;
+    Objid oid;
     Objid size = db_last_used_objid() + 1;
     int broken = 0;
     int fixed_nexts = 0;
 
     oklog("VALIDATING the object hierarchies ...\n");
 
-#   define PROGRESS_INTERVAL 10000
 #   define MAYBE_LOG_PROGRESS					\
     {								\
-        if (oid == log_oid) {					\
-	    log_oid += PROGRESS_INTERVAL;			\
+        if (log_report_progress()) {				\
 	    oklog("VALIDATE: Done through #%d ...\n", oid);	\
 	}							\
     }
 
     oklog("VALIDATE: Phase 1: Check for invalid objects ...\n");
-    for (oid = 0, log_oid = PROGRESS_INTERVAL; oid < size; oid++) {
+    for (oid = 0; oid < size; oid++) {
 	Object *o = dbpriv_find_object(oid);
 
 	MAYBE_LOG_PROGRESS;
@@ -343,7 +364,7 @@ validate_hierarchies()
     } /* recovery_mode */ 
 
     oklog("VALIDATE: Phase 2: Check for cycles ...\n");
-    for (oid = 0, log_oid = PROGRESS_INTERVAL; oid < size; oid++) {
+    for (oid = 0; oid < size; oid++) {
 	Object *o = dbpriv_find_object(oid);
 	Objid list_end;
 
@@ -379,11 +400,80 @@ validate_hierarchies()
 	    o->lastcontents = list_end;
 
 #	    undef CHECK
+
+	    /* setup for phase 3:  set two temp flags on every object */
+	    o->flags |= (3<<FLAG_FIRST_TEMP);
 	}
     }
 
     if (broken)			/* Can't continue if cycles found */
 	return 0;
+
+    /*  Note for future: I removed an old Phase 3 at some point, but I don't remember why;
+     *  rog made these later so I'm adding them back in... but maybe they shouldn't be here?
+     *  A mystery for you, the reader. -seraph
+     */
+    oklog("VALIDATE: Phase 3a: Finding delusional parents ...\n");
+    for (oid = 0; oid < size; oid++) {
+	Object *o = dbpriv_find_object(oid);
+
+	MAYBE_LOG_PROGRESS;
+	if (o) {
+#	    define CHECK(up, down, down_name, across, FLAG)	\
+	    {							\
+		Objid	oidkid;					\
+		Object *okid;					\
+								\
+		for (oidkid = o->down;				\
+		     oidkid != NOTHING;				\
+		     oidkid = okid->across) {			\
+								\
+		    okid = dbpriv_find_object(oidkid);		\
+		    if (okid->up != oid) {			\
+			errlog(					\
+			    "VALIDATE: #%d erroneously on #%d's %s list.\n", \
+			    oidkid, oid, down_name);		\
+			broken = 1;				\
+		    }						\
+		    else {					\
+			/* mark okid as properly claimed */	\
+			okid->flags &= ~(1<<(FLAG));		\
+		    }						\
+		}						\
+	    }
+
+	    CHECK(parent,   child,    "child",    sibling, FLAG_FIRST_TEMP);
+	    CHECK(location, contents, "contents", next,    FLAG_FIRST_TEMP+1);
+
+#	    undef CHECK
+	}
+    }
+
+    oklog("VALIDATE: Phase 3b: Finding delusional children ...\n");
+    for (oid = 0; oid < size; oid++) {
+	Object *o = dbpriv_find_object(oid);
+
+	MAYBE_LOG_PROGRESS;
+	if (o) {
+#	    define CHECK(up, up_name, down_name, FLAG)			\
+	    {								\
+		/* If oid is unclaimed, up must be NOTHING */		\
+		if ((o->flags & (1<<(FLAG))) && o->up != NOTHING) {	\
+		    errlog("VALIDATE: #%d not in %s (#%d)'s %s list.\n", \
+			   oid, up_name, o->up, down_name);		\
+		    broken = 1;						\
+		}							\
+	    }
+
+	    CHECK(parent,   "parent",   "child",    FLAG_FIRST_TEMP);
+	    CHECK(location, "location", "contents", FLAG_FIRST_TEMP+1);
+
+	    /* clear temp flags */
+	    o->flags &= ~(3<<FLAG_FIRST_TEMP);
+
+#	    undef CHECK
+	}
+    }
 
     oklog("VALIDATING the object hierarchies ... finished.\n");
     return !broken;
@@ -446,7 +536,7 @@ read_db_file(void)
 	    errlog("READ_DB_FILE: Bad object #%d.\n", i - 1);
 	    return 0;
 	}
-	if (i % 10000 == 0 || i == nobjs)
+	if (i == nobjs || log_report_progress())
 	    oklog("LOADING: Done reading %d objects ...\n", i);
     }
 
@@ -476,7 +566,7 @@ read_db_file(void)
 	    return 0;
 	}
 	db_set_verb_program(h, program);
-	if (i % 5000 == 0 || i == nprogs)
+	if (i == nprogs || log_report_progress())
 	    oklog("LOADING: Done reading %d verb programs...\n", i);
     }
 
@@ -520,38 +610,39 @@ write_db_file(const char *reason)
 
     user_list = db_all_users();
 
-    TRY
+    TRY {
 	dbio_printf(header_format_string, current_version);
-    dbio_printf("%d\n%d\n%d\n%d\n",
-		max_oid + 1, nprogs, 0, user_list.v.list[0].v.num);
-    for (i = 1; i <= user_list.v.list[0].v.num; i++)
-	dbio_write_objid(user_list.v.list[i].v.obj);
-    oklog("%s: Writing %d objects...\n", reason, max_oid + 1);
-    for (oid = 0; oid <= max_oid; oid++) {
-	write_object(oid);
-	if ((oid + 1) % 10000 == 0 || oid == max_oid)
-	    oklog("%s: Done writing %d objects...\n", reason, oid + 1);
-    }
-    oklog("%s: Writing %d MOO verb programs...\n", reason, nprogs);
-    for (i = 0, oid = 0; oid <= max_oid; oid++)
-	if (valid(oid)) {
-	    int vcount = 0;
-
-	    for (v = dbpriv_find_object(oid)->verbdefs; v; v = v->next) {
-		if (v->program) {
-		    dbio_printf("#%d:%d\n", oid, vcount);
-		    dbio_write_program(v->program);
-		    if (++i % 5000 == 0 || i == nprogs)
-			oklog("%s: Done writing %d verb programs...\n",
-			      reason, i);
-		}
-		vcount++;
-	    }
+	dbio_printf("%d\n%d\n%d\n%d\n",
+		    max_oid + 1, nprogs, 0, user_list.v.list[0].v.num);
+	for (i = 1; i <= user_list.v.list[0].v.num; i++)
+	    dbio_write_objid(user_list.v.list[i].v.obj);
+	oklog("%s: Writing %d objects...\n", reason, max_oid + 1);
+	for (oid = 0; oid <= max_oid; oid++) {
+	    write_object(oid);
+	    if (oid == max_oid || log_report_progress())
+		oklog("%s: Done writing %d objects...\n", reason, oid + 1);
 	}
-    oklog("%s: Writing forked and suspended tasks...\n", reason);
-    write_task_queue();
-    oklog("%s: Writing list of formerly active connections...\n", reason);
-    write_active_connections();
+	oklog("%s: Writing %d MOO verb programs...\n", reason, nprogs);
+	for (i = 0, oid = 0; oid <= max_oid; oid++)
+	    if (valid(oid)) {
+		int vcount = 0;
+
+		for (v = dbpriv_find_object(oid)->verbdefs; v; v = v->next) {
+		    if (v->program) {
+			dbio_printf("#%d:%d\n", oid, vcount);
+			dbio_write_program(v->program);
+			if (++i == nprogs || log_report_progress())
+			    oklog("%s: Done writing %d verb programs...\n",
+				  reason, i);
+		    }
+		    vcount++;
+		}
+	    }
+	oklog("%s: Writing forked and suspended tasks...\n", reason);
+	write_task_queue();
+	oklog("%s: Writing list of formerly active connections...\n", reason);
+	write_active_connections();
+    }
     EXCEPT(dbpriv_dbio_failed)
 	success = 0;
     ENDTRY;
@@ -757,32 +848,18 @@ db_shutdown()
     dump_database(DUMP_SHUTDOWN);
 }
 
-char rcsid_db_file[] = "$Id: db_file.c,v 1.8 2009/03/08 12:41:31 blacklite Exp $";
+char rcsid_db_file[] = "$Id: db_file.c,v 1.5 2004/05/22 01:25:43 wrog Exp $";
 
 /* 
  * $Log: db_file.c,v $
- * Revision 1.8  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
+ * Revision 1.5  2004/05/22 01:25:43  wrog
+ * merging in WROGUE changes (W_SRCIP, W_STARTUP, W_OOB)
  *
- * Revision 1.7  2008/08/24 07:57:05  blacklite
- * massive speedup to rebuild, which in itself demonstrates how great it is 
- * to have a lastcontents/lastchild pointer. rebuild phase 2 now takes <1 sec, 
- * down from ~18 minutes. :o
+ * Revision 1.4.8.2  2003/06/03 12:21:17  wrog
+ * new validation algorithms for cycle-detection and hierarchy checking
  *
- * Revision 1.6  2008/08/24 05:06:13  blacklite
- * Add -r option and more fixes to the recovery process.
- *
- * Revision 1.5  2008/08/23 21:30:31  blacklite
- * Add emergency rebuild phase
- *
- * Revision 1.4  2008/08/22 22:09:20  blacklite
- * Add lastchild and lastcontents to make linked lists both undumb and fast.
- * (As opposed to my insert-at-the-front hack which was fast but dumb.)
- *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.4.8.1  2003/06/01 12:27:35  wrog
+ * added braces and fixed indentation on TRY
  *
  * Revision 1.4  1998/12/14 13:17:33  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims

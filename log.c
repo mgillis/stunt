@@ -15,6 +15,13 @@
     Pavel@Xerox.Com
  *****************************************************************************/
 
+/* Hellmoo changes:
+ * Revision 1.4  2009/03/08 12:41:31  blacklite
+ * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
+ * extra myrealloc() and memcpy() tricks for lists, Valgrind
+ * support for str_intern.c, etc. See ChangeLog.txt.
+ */
+
 #include <errno.h>
 #include "my-stdarg.h"
 #include "my-stdio.h"
@@ -31,6 +38,8 @@
 #include "utils.h"
 
 static FILE *log_file = 0;
+int log_pcount = 5000;
+static time_t log_prev = 0;
 
 void
 set_log_file(FILE * f)
@@ -44,14 +53,22 @@ get_log_file()
 	return log_file;
 }
 
+int log_report_progress_cktime()
+{
+    time_t now = time(0);
+    log_pcount = 5000;
+    return ((now >= log_prev + 2) && (log_prev = now, 1));
+}
+
 static void
 do_log(const char *fmt, va_list args, const char *prefix)
 {
     FILE *f;
 
+    log_prev = time(0);
+    log_pcount = 5000;
     if (log_file) {
-	time_t now = time(0);
-	char *nowstr = ctime(&now);
+	char *nowstr = ctime(&log_prev);
 
 	nowstr[19] = '\0';	/* kill the year and newline at the end */
 	f = log_file;
@@ -155,17 +172,15 @@ register_log(void)
     register_function("server_log", 1, 2, bf_server_log, TYPE_STR, TYPE_ANY);
 }
 
-char rcsid_log[] = "$Id: log.c,v 1.4 2009/03/08 12:41:31 blacklite Exp $";
+char rcsid_log[] = "$Id: log.c,v 1.4 2004/05/22 01:25:43 wrog Exp $";
 
 /* 
  * $Log: log.c,v $
- * Revision 1.4  2009/03/08 12:41:31  blacklite
- * Added HASH data type, yield keyword, MEMORY_TRACE, vfscanf(),
- * extra myrealloc() and memcpy() tricks for lists, Valgrind
- * support for str_intern.c, etc. See ChangeLog.txt.
+ * Revision 1.4  2004/05/22 01:25:43  wrog
+ * merging in WROGUE changes (W_SRCIP, W_STARTUP, W_OOB)
  *
- * Revision 1.3  2007/09/12 07:33:29  spunky
- * This is a working version of the current HellMOO server
+ * Revision 1.3.10.1  2003/06/03 12:19:27  wrog
+ * added log_report_progress()
  *
  * Revision 1.3  1998/12/14 13:17:59  nop
  * Merge UNSAFE_OPTS (ref fixups); fix Log tag placement to fit CVS whims
